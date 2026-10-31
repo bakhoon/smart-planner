@@ -1,7 +1,7 @@
 // Local database (IndexedDB through Dexie). Works offline; nothing leaves this computer.
 import Dexie from 'dexie';
 import { tr } from './i18n.js';
-import { parseDate, addDays, ymd } from './dates.js';
+import { parseDate, addDays, ymd, mondayOf } from './dates.js';
 
 export const db = new Dexie('planner');
 
@@ -18,6 +18,26 @@ db.version(2).stores({
   tickets: '++id, categoryId, date, status, kind, seriesId',
   plans: '++id, date',
 });
+// v3: weekly sprints (sprint-2026-10-26). Existing tickets are moved into the sprint of their date,
+// planned on their own weekday, and old repeat series become chains so they can still be deleted together.
+db.version(3)
+  .stores({
+    categories: '++id, &key, name',
+    tickets: '++id, categoryId, date, status, kind, seriesId, sprint, chainId',
+    plans: '++id, date',
+  })
+  .upgrade((tx) => tx.table('tickets').toCollection().modify((t) => {
+    const d = parseDate(t.date);
+    const i = (d.getDay() + 6) % 7;
+    t.sprint = `sprint-${ymd(addDays(d, -i))}`;
+    t.days = [false, false, false, false, false, false, false];
+    t.days[i] = true;
+    t.daysDone = [false, false, false, false, false, false, false];
+    if (t.kind !== 'meeting' && t.status === 'done') t.daysDone[i] = true;
+    t.carry = false;
+    t.carriedTo = null;
+    t.chainId = t.seriesId || `c${t.id}`;
+  }));
 
 export const PALETTE = [
   { name: '파랑', color: '#7DB2FF', soft: '#1E3358' },
@@ -55,81 +75,109 @@ export async function deleteCategory(id) {
   });
 }
 
-/* ---------- tickets ---------- */
+/* ---------- sprints ---------- */
 
-// Every date a form would create a ticket on
-export function datesFor(form) {
-  if (form.repeat === 'once') return form.date ? [form.date] : [];
-  if (!form.from || !form.to || form.to < form.from) return [];
-  const out = [];
-  let d = parseDate(form.from);
-  const end = parseDate(form.to);
-  while (d <= end && out.length < 1000) {
-    if (form.repeat === 'daily' || (form.repeat === 'weekly' && form.days[d.getDay()])) out.push(ymd(d));
-    d = addDays(d, 1);
-  }
-  return out;
-}
+// A sprint is one week, Monday to Sunday, named after its Monday: sprint-2026-10-26.
+// days / daysDone are 7 booleans in Monday-first order (index 0 = Monday ... 6 = Sunday).
+export const sprintKey = (monday) => `sprint-${ymd(monday)}`;
+export const sprintMonday = (key) => parseDate(key.slice(7));
+export const sprintOf = (dateStr) => sprintKey(mondayOf(parseDate(dateStr)));
+export const dayIndexOf = (dateStr) => (parseDate(dateStr).getDay() + 6) % 7;
+export const sprintEnd = (key) => ymd(addDays(sprintMonday(key), 6));
+const noDays = () => [false, false, false, false, false, false, false];
+
+/* ---------- tickets ---------- */
 
 export function validateTicket(form) {
   if (!form.title.trim()) return tr('제목을 입력해 주세요.');
-  if (form.repeat === 'once' && !form.date) return tr('날짜를 골라 주세요.');
   if (!form.categoryId) return tr('카테고리를 골라 주세요. 없으면 카테고리를 먼저 만들어 주세요.');
-  if (form.repeat !== 'once') {
-    if (!form.from || !form.to) return tr('기간의 시작 날짜와 끝 날짜를 넣어 주세요.');
-    if (form.to < form.from) return tr('기간의 끝 날짜가 시작 날짜보다 빨라요.');
-    if (form.repeat === 'weekly' && !form.days.some(Boolean)) return tr('반복할 요일을 하나 이상 골라 주세요.');
+  if (form.kind === 'meeting') {
+    if (!form.date) return tr('미팅 날짜를 골라 주세요.');
+    if (!form.allDay && (!form.start || !form.end || form.end <= form.start)) return tr('끝나는 시간이 시작 시간보다 늦어야 해요.');
+  } else if (form.hasDeadline && !form.deadline) {
+    return tr('데드라인 날짜를 골라 주세요.');
   }
-  if (form.kind === 'meeting' && !form.allDay && (!form.start || !form.end || form.end <= form.start)) {
-    return tr('끝나는 시간이 시작 시간보다 늦어야 해요.');
-  }
-  if (form.kind === 'task' && form.hasDeadline && !form.deadline) return tr('데드라인 날짜를 골라 주세요.');
-  if (!datesFor(form).length) return tr('만들어질 날짜가 없어요. 기간이나 요일을 확인해 주세요.');
   return '';
 }
 
-// Creates one ticket per date. Numbers per category keep counting up (MAP-00001, MAP-00002 ...).
-export async function createTickets(form) {
-  const dates = datesFor(form);
+// One ticket in one sprint. Numbers per category keep counting up (MAP-00001, MAP-00002 ...).
+export async function createTicket(form) {
   const meeting = form.kind === 'meeting';
   return db.transaction('rw', db.categories, db.tickets, async () => {
     const cat = await db.categories.get(form.categoryId);
-    let n = cat.lastNumber || 0;
-    const seriesId = dates.length > 1 ? `s${Date.now()}` : null;
-    const rows = dates.map((date, i) => ({
+    const n = (cat.lastNumber || 0) + 1;
+    let sprint;
+    let days;
+    let date;
+    if (meeting) {
+      date = form.date;
+      sprint = sprintOf(date);
+      days = noDays();
+      days[dayIndexOf(date)] = true;
+    } else {
+      sprint = form.sprint;
+      days = form.days.slice();
+      const first = days.findIndex(Boolean);
+      date = ymd(addDays(sprintMonday(sprint), first === -1 ? 0 : first));
+    }
+    await db.tickets.add({
       kind: form.kind,
       categoryId: form.categoryId,
-      number: ++n,
+      number: n,
       title: form.title.trim(),
       desc: form.desc.trim(),
-      // each repeated ticket gets its own copy, so checking one day doesn't check the others
-      checklist: (form.checklist || [])
-        .map((text) => text.trim())
-        .filter(Boolean)
-        .map((text) => ({ text, done: false })),
+      checklist: (form.checklist || []).map((x) => x.trim()).filter(Boolean).map((text) => ({ text, done: false })),
+      sprint,
       date,
+      days,
+      daysDone: noDays(),
       start: meeting && !form.allDay ? form.start : '',
       end: meeting && !form.allDay ? form.end : '',
       allDay: meeting && form.allDay,
+      // empty deadline = end of the sprint (Sunday)
       deadline: !meeting && form.hasDeadline ? form.deadline : '',
       deadlineTime: !meeting && form.hasDeadline ? form.deadlineTime : '',
       priority: form.priority,
       status: 'todo',
-      seriesId,
-      seriesIndex: i + 1,
-      seriesTotal: dates.length,
+      carry: !!form.carry,
+      carriedTo: null,
+      chainId: `c${Date.now()}`,
       createdAt: Date.now(),
-    }));
-    await db.tickets.bulkAdd(rows);
+    });
     await db.categories.update(cat.id, { lastNumber: n });
-    return rows.length;
   });
 }
 
-const NEXT = { todo: 'doing', doing: 'done', done: 'todo' };
-
-export async function cycleStatus(ticket) {
-  await db.tickets.update(ticket.id, { status: NEXT[ticket.status] });
+// Copies tickets marked "continue into the next sprint" forward, sprint by sprint, up to targetKey.
+export async function rollForward(targetKey) {
+  await db.transaction('rw', db.categories, db.tickets, async () => {
+    for (let guard = 0; guard < 120; guard++) {
+      const open = await db.tickets.filter((t) => t.carry && !t.carriedTo && t.sprint < targetKey).toArray();
+      if (!open.length) return;
+      for (const t of open) {
+        const cat = await db.categories.get(t.categoryId);
+        if (!cat) { await db.tickets.update(t.id, { carry: false }); continue; }
+        const n = (cat.lastNumber || 0) + 1;
+        await db.categories.update(cat.id, { lastNumber: n });
+        const nextKey = sprintKey(addDays(sprintMonday(t.sprint), 7));
+        const copy = {
+          ...t,
+          number: n,
+          sprint: nextKey,
+          date: ymd(addDays(parseDate(t.date), 7)),
+          deadline: t.deadline ? ymd(addDays(parseDate(t.deadline), 7)) : '',
+          status: 'todo',
+          daysDone: noDays(),
+          checklist: (t.checklist || []).map((c) => ({ ...c, done: false })),
+          carriedTo: null,
+          createdAt: Date.now(),
+        };
+        delete copy.id;
+        await db.tickets.add(copy);
+        await db.tickets.update(t.id, { carriedTo: nextKey });
+      }
+    }
+  });
 }
 
 export async function setStatus(id, status) {
@@ -145,12 +193,45 @@ export async function toggleCheck(ticket, index) {
   await db.tickets.update(ticket.id, { checklist });
 }
 
+// Tick a weekday as done (only for days the ticket is planned on)
+export async function toggleDayDone(ticket, i) {
+  const daysDone = (ticket.daysDone || noDays()).slice();
+  daysDone[i] = !daysDone[i];
+  await db.tickets.update(ticket.id, { daysDone });
+}
+
+// Plan or unplan a weekday
+export async function toggleDay(ticket, i) {
+  const days = (ticket.days || noDays()).slice();
+  const daysDone = (ticket.daysDone || noDays()).slice();
+  days[i] = !days[i];
+  if (!days[i]) daysDone[i] = false;
+  await db.tickets.update(ticket.id, { days, daysDone });
+}
+
+// Drop on a weekday column: a meeting moves there; a task gets that day added (or moved, if it had one day or none)
+export async function moveToDay(ticket, i) {
+  const date = ymd(addDays(sprintMonday(ticket.sprint), i));
+  if (ticket.kind === 'meeting') {
+    const days = noDays();
+    days[i] = true;
+    await db.tickets.update(ticket.id, { date, days, daysDone: noDays() });
+    return;
+  }
+  const planned = (ticket.days || noDays()).filter(Boolean).length;
+  const days = planned <= 1 ? noDays() : ticket.days.slice();
+  days[i] = true;
+  const daysDone = planned <= 1 ? noDays() : (ticket.daysDone || noDays()).slice();
+  await db.tickets.update(ticket.id, { days, daysDone, date: ymd(addDays(sprintMonday(ticket.sprint), days.findIndex(Boolean))) });
+}
+
 export async function deleteTicket(id) {
   await db.tickets.delete(id);
 }
 
-export async function deleteSeries(seriesId) {
-  await db.tickets.where('seriesId').equals(seriesId).delete();
+// Every ticket from the same chain (carried copies, or an old repeat series)
+export async function deleteSeries(chainId) {
+  await db.tickets.where('chainId').equals(chainId).delete();
 }
 
 /* ---------- 오늘의 플랜 ---------- */

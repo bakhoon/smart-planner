@@ -1,25 +1,26 @@
 import { useEffect, useState } from 'react';
-import { PALETTE, datesFor, validateTicket, createTickets } from './db.js';
-import { addDays, fmtDay, fmtLong, parseDate, weekdayLong, weekdayName, ymd } from './dates.js';
+import { PALETTE, validateTicket, createTicket, sprintKey, sprintMonday, sprintOf, sprintEnd, dayIndexOf } from './db.js';
+import { addDays, fmtDay, weekdayLong, weekdayName } from './dates.js';
 import { tr } from './i18n.js';
 import * as I from './icons.jsx';
 
-const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+// Monday-first weekday numbers for weekdayName (0 = Sunday in JS dates)
+const MON_FIRST = [1, 2, 3, 4, 5, 6, 0];
 
-export default function TicketModal({ categories, defaultDate, defaultKind, defaultStart, defaultEnd, defaultCategoryId, onClose, onCreated, onOpenCategories }) {
+export default function TicketModal({ categories, sprint, pickDay, defaultDate, defaultKind, defaultStart, defaultEnd, defaultCategoryId, onClose, onCreated, onOpenCategories }) {
   const [form, setForm] = useState(() => {
     const days = [false, false, false, false, false, false, false];
-    days[parseDate(defaultDate).getDay()] = true;
+    // opened from a weekday column: that day is picked already
+    if (pickDay && defaultDate && sprintOf(defaultDate) === sprint) days[dayIndexOf(defaultDate)] = true;
     return {
       kind: defaultKind || 'task',
       title: '',
       desc: '',
       categoryId: defaultCategoryId || null,
-      repeat: 'once',
-      date: defaultDate,
-      from: defaultDate,
-      to: ymd(addDays(parseDate(defaultDate), 6)),
+      sprint,
       days,
+      carry: false,
+      date: defaultDate,
       allDay: false,
       start: defaultStart || '14:00',
       end: defaultEnd || '15:00',
@@ -31,19 +32,9 @@ export default function TicketModal({ categories, defaultDate, defaultKind, defa
     };
   });
   const [newItem, setNewItem] = useState('');
-
-  const addItem = () => {
-    const text = newItem.trim();
-    if (!text) return;
-    setForm((f) => ({ ...f, checklist: [...f.checklist, text] }));
-    setNewItem('');
-  };
-  const editItem = (i, text) => setForm((f) => ({ ...f, checklist: f.checklist.map((x, k) => (k === i ? text : x)) }));
-  const removeItem = (i) => setForm((f) => ({ ...f, checklist: f.checklist.filter((_, k) => k !== i) }));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // pick the first category once categories exist
   useEffect(() => {
     if (!form.categoryId && categories.length) setForm((f) => ({ ...f, categoryId: categories[0].id }));
   }, [categories, form.categoryId]);
@@ -56,27 +47,29 @@ export default function TicketModal({ categories, defaultDate, defaultKind, defa
 
   const set = (k, v) => { setForm((f) => ({ ...f, [k]: v })); setError(''); };
   const isMeeting = form.kind === 'meeting';
-  const isRepeat = form.repeat !== 'once';
-  const dates = datesFor(form);
+  const monday = sprintMonday(form.sprint);
+  const moveSprint = (n) => set('sprint', sprintKey(addDays(monday, 7 * n)));
+
+  const addItem = () => {
+    const text = newItem.trim();
+    if (!text) return;
+    setForm((f) => ({ ...f, checklist: [...f.checklist, text] }));
+    setNewItem('');
+  };
+  const editItem = (i, text) => setForm((f) => ({ ...f, checklist: f.checklist.map((x, k) => (k === i ? text : x)) }));
+  const removeItem = (i) => setForm((f) => ({ ...f, checklist: f.checklist.filter((_, k) => k !== i) }));
 
   async function submit() {
     const msg = validateTicket(form);
     if (msg) { setError(msg); return; }
     setSaving(true);
     try {
-      const n = await createTickets(form);
-      onCreated(n);
+      await createTicket(form);
+      onCreated();
     } catch (err) {
       setError(err.message || tr('저장에 실패했어요.'));
       setSaving(false);
     }
-  }
-
-  let periodHint = tr('시작 날짜와 끝 날짜를 골라 주세요');
-  if (form.from && form.to) {
-    periodHint = form.to < form.from
-      ? tr('끝 날짜가 시작 날짜보다 빨라요')
-      : `${fmtDay(form.from)} ~ ${fmtDay(form.to)} · ${tr('총 {n}일', { n: Math.round((parseDate(form.to) - parseDate(form.from)) / 86400000) + 1 })}`;
   }
 
   return (
@@ -136,82 +129,81 @@ export default function TicketModal({ categories, defaultDate, defaultKind, defa
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); addItem(); } }} />
               <button className="btn outline small" onClick={addItem}><I.Plus size={12} /> {tr('추가')}</button>
             </div>
-            {isRepeat && <small className="muted">{tr('반복 티켓마다 체크리스트가 따로 생겨요. 오늘 체크해도 다른 날은 그대로예요.')}</small>}
           </div>
 
-          <Choice label={tr('반복 (기간 안의 날짜마다 티켓 만들기)')} value={form.repeat} onChange={(v) => set('repeat', v)}
-            options={[{ v: 'once', label: tr('한 번만') }, { v: 'daily', label: tr('매일') }, { v: 'weekly', label: tr('매주 (요일)') }]} />
-
-          {form.repeat === 'weekly' && (
-            <div className="wrap" role="group" aria-label={tr('반복할 요일')}>
-              {DAY_ORDER.map((i) => (
-                <button key={i} className={'day-toggle' + (form.days[i] ? ' on' : '')} aria-pressed={form.days[i]}
-                  aria-label={weekdayLong(i)}
-                  onClick={() => { const ds = form.days.slice(); ds[i] = !ds[i]; set('days', ds); }}>
-                  {weekdayName(i)}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {!isRepeat && (
-            <Field label={isMeeting ? tr('미팅 날짜') : tr('날짜 (보드에 들어갈 날)')} htmlFor="tm-date">
-              <input id="tm-date" type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
-            </Field>
-          )}
-
-          {isRepeat && (
-            <div className="field">
-              <span className="label">{tr('기간 (며칠부터 며칠까지)')}</span>
-              <div className="row">
-                <input aria-label={tr('시작 날짜')} type="date" value={form.from} onChange={(e) => set('from', e.target.value)} />
-                <span className="muted">~</span>
-                <input aria-label={tr('끝나는 날짜')} type="date" value={form.to} onChange={(e) => set('to', e.target.value)} />
-              </div>
-              <small className="muted">{periodHint} · {tr('날짜마다 티켓이 하나씩 생겨요')}</small>
-            </div>
-          )}
-
           {isMeeting ? (
-            <div className="field">
-              <Choice label={tr('시간')} value={form.allDay ? 'all' : 'time'} onChange={(v) => set('allDay', v === 'all')}
-                options={[{ v: 'all', label: tr('하루 종일') }, { v: 'time', label: tr('시간 지정') }]} />
-              {!form.allDay && (
-                <div className="row">
-                  <input aria-label={tr('시작 시간')} type="time" value={form.start} onChange={(e) => set('start', e.target.value)} />
-                  <span className="muted">~</span>
-                  <input aria-label={tr('끝나는 시간')} type="time" value={form.end} onChange={(e) => set('end', e.target.value)} />
-                </div>
-              )}
-            </div>
+            <>
+              <Field label={tr('미팅 날짜')} htmlFor="tm-date">
+                <input id="tm-date" type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+              </Field>
+              <div className="field">
+                <Choice label={tr('시간')} value={form.allDay ? 'all' : 'time'} onChange={(v) => set('allDay', v === 'all')}
+                  options={[{ v: 'all', label: tr('하루 종일') }, { v: 'time', label: tr('시간 지정') }]} />
+                {!form.allDay && (
+                  <div className="row">
+                    <input aria-label={tr('시작 시간')} type="time" value={form.start} onChange={(e) => set('start', e.target.value)} />
+                    <span className="muted">~</span>
+                    <input aria-label={tr('끝나는 시간')} type="time" value={form.end} onChange={(e) => set('end', e.target.value)} />
+                  </div>
+                )}
+              </div>
+              <Toggle checked={form.carry} onChange={(v) => set('carry', v)}
+                label={tr('매주 이어서')} hint={tr('다음 스프린트에도 같은 요일, 같은 시간으로 생겨요')} />
+            </>
           ) : (
-            <div className="field">
-              <Choice label={tr('데드라인 (선택)')} value={form.hasDeadline ? 'yes' : 'no'}
-                onChange={(v) => setForm((f) => ({ ...f, hasDeadline: v === 'yes', deadline: v === 'yes' && !f.deadline ? f.date : f.deadline }))}
-                options={[{ v: 'no', label: tr('없음') }, { v: 'yes', label: tr('날짜 정하기') }]} />
-              {form.hasDeadline && (
-                <div className="row">
-                  <input aria-label={tr('데드라인 날짜')} type="date" value={form.deadline} onChange={(e) => set('deadline', e.target.value)} />
-                  <input aria-label={tr('데드라인 시간')} type="time" className="narrow" value={form.deadlineTime} onChange={(e) => set('deadlineTime', e.target.value)} />
-                  <span className="muted">{tr('까지')}</span>
+            <>
+              <div className="field">
+                <span className="label">{tr('스프린트')}</span>
+                <div className="sprint-pick">
+                  <button className="icon-btn small" aria-label={tr('이전 스프린트')} onClick={() => moveSprint(-1)}><I.ChevronLeft /></button>
+                  <span className="grow">
+                    <strong>{form.sprint}</strong>
+                    <small className="muted block">{fmtDay(form.sprint.slice(7))} ~ {fmtDay(sprintEnd(form.sprint))}</small>
+                  </span>
+                  <button className="icon-btn small" aria-label={tr('다음 스프린트')} onClick={() => moveSprint(1)}><I.ChevronRight /></button>
                 </div>
-              )}
-            </div>
+              </div>
+
+              <div className="field">
+                <span className="label">{tr('할 요일')} <span className="muted">{tr('(선택)')}</span></span>
+                <div className="wrap" role="group" aria-label={tr('할 요일')}>
+                  {MON_FIRST.map((wd, i) => (
+                    <button key={i} className={'day-toggle' + (form.days[i] ? ' on' : '')} aria-pressed={form.days[i]}
+                      aria-label={weekdayLong(wd)}
+                      onClick={() => { const ds = form.days.slice(); ds[i] = !ds[i]; set('days', ds); }}>
+                      {weekdayName(wd)}
+                    </button>
+                  ))}
+                  <button className="chip dashed" onClick={() => set('days', form.days.every(Boolean) ? form.days.map(() => false) : form.days.map(() => true))}>
+                    {form.days.every(Boolean) ? tr('모두 해제') : tr('매일')}
+                  </button>
+                </div>
+                <small className="muted">{tr('고른 요일마다 카드에 체크칸이 생겨요. 안 골라도 돼요.')}</small>
+              </div>
+
+              <div className="field">
+                <Choice label={tr('데드라인')} value={form.hasDeadline ? 'yes' : 'no'}
+                  onChange={(v) => setForm((f) => ({ ...f, hasDeadline: v === 'yes', deadline: v === 'yes' && !f.deadline ? sprintEnd(f.sprint) : f.deadline }))}
+                  options={[
+                    { v: 'no', label: tr('스프린트 끝 ({d})', { d: fmtDay(sprintEnd(form.sprint)) }) },
+                    { v: 'yes', label: tr('날짜 정하기') },
+                  ]} />
+                {form.hasDeadline && (
+                  <div className="row">
+                    <input aria-label={tr('데드라인 날짜')} type="date" value={form.deadline} onChange={(e) => set('deadline', e.target.value)} />
+                    <input aria-label={tr('데드라인 시간')} type="time" className="narrow" value={form.deadlineTime} onChange={(e) => set('deadlineTime', e.target.value)} />
+                    <span className="muted">{tr('까지')}</span>
+                  </div>
+                )}
+              </div>
+
+              <Toggle checked={form.carry} onChange={(v) => set('carry', v)}
+                label={tr('다음 스프린트에도 이어서')} hint={tr('매주 하는 일이면 켜 두세요. 새 스프린트마다 같은 티켓이 새로 생겨요.')} />
+            </>
           )}
 
           <Choice label={tr('우선순위')} value={form.priority} onChange={(v) => set('priority', v)}
             options={[{ v: 'high', label: tr('높음') }, { v: 'mid', label: tr('보통') }, { v: 'low', label: tr('낮음') }]} />
-
-          {isRepeat && (
-            <div className="preview">
-              <strong>{tr('티켓 {n}개가 만들어져요', { n: dates.length })}</strong>
-              <small>
-                {dates.length
-                  ? dates.slice(0, 4).map(fmtDay).join(', ') + (dates.length > 4 ? ` ... ${tr('{d}까지', { d: fmtDay(dates[dates.length - 1]) })}` : '')
-                  : tr('기간이나 요일을 골라 주세요')}
-              </small>
-            </div>
-          )}
 
           {error && <p className="error" role="alert">{error}</p>}
         </div>
@@ -234,6 +226,18 @@ function Field({ label, htmlFor, children }) {
   );
 }
 
+export function Toggle({ checked, onChange, label, hint }) {
+  return (
+    <label className="toggle-row">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className="grow">
+        <strong>{label}</strong>
+        {hint && <small className="muted block">{hint}</small>}
+      </span>
+    </label>
+  );
+}
+
 function Choice({ label, value, onChange, options, big }) {
   return (
     <div className="field">
@@ -249,3 +253,4 @@ function Choice({ label, value, onChange, options, big }) {
     </div>
   );
 }
+

@@ -1,29 +1,62 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, PALETTE, code, toggleCheck, setStatus, updateTicket, exportAll, importAll } from './db.js';
-import { addDays, fmtDay, fmtLong, fmtTime, mondayOf, today, weekTitle, weekdayLong, weekdayName, ymd } from './dates.js';
+import {
+  db, PALETTE, code, toggleCheck, setStatus, moveToDay, rollForward,
+  sprintKey, exportAll, importAll,
+} from './db.js';
+import { addDays, fmtDay, fmtTime, mondayOf, today, weekdayName, ymd } from './dates.js';
 import { tr, getLang, setLang } from './i18n.js';
 import TicketModal from './TicketModal.jsx';
 import CategoryModal from './CategoryModal.jsx';
 import MeetingCalendar from './MeetingCalendar.jsx';
 import TicketDetail, { STATUS } from './TicketDetail.jsx';
 import TodayPlan from './TodayPlan.jsx';
+import DayChecks from './DayChecks.jsx';
 import * as I from './icons.jsx';
 
+// Monday-first weekday numbers for weekdayName (0 = Sunday in JS dates)
 const MON_FIRST = [1, 2, 3, 4, 5, 6, 0];
+const NO_DAYS = [false, false, false, false, false, false, false];
 
 export default function App() {
   const [monday, setMonday] = useState(() => mondayOf(today()));
   const [filter, setFilter] = useState('all');
-  const [view, setView] = useState('date');
+  const [view, setView] = useState('status');
   const [ticketModal, setTicketModal] = useState(null);
   const [catOpen, setCatOpen] = useState(false);
   const [detailId, setDetailId] = useState(null);
   const [lang, setLangState] = useState(getLang());
   const switchLang = (l) => { setLang(l); setLangState(l); };
   const [dropKey, setDropKey] = useState(null);
+  const [toast, setToast] = useState('');
+  const fileRef = useRef(null);
 
-  // drag & drop: a card carries its ticket id; a day column changes the date, a status column changes the status
+  const sprint = sprintKey(monday);
+  const currentSprint = sprintKey(mondayOf(today()));
+  const from = ymd(monday);
+  const to = ymd(addDays(monday, 6));
+  const todayKey = ymd(today());
+
+  // Tickets marked "continue into the next sprint" are copied forward up to the sprint being looked at
+  useEffect(() => {
+    rollForward(sprint > currentSprint ? sprint : currentSprint);
+  }, [sprint, currentSprint]);
+
+  const categories = useLiveQuery(() => db.categories.toArray(), [], []);
+  const sprintTickets = useLiveQuery(() => db.tickets.where('sprint').equals(sprint).toArray(), [sprint], []);
+  const allCount = useLiveQuery(() => db.tickets.count(), [], 0);
+
+  const catById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories]);
+  const visible = sprintTickets
+    .filter((t) => filter === 'all' || t.categoryId === filter)
+    .filter((t) => catById[t.categoryId])
+    .sort((a, b) => (a.date + (a.start || '')).localeCompare(b.date + (b.start || '')) || a.number - b.number);
+
+  const done = sprintTickets.filter((t) => t.status === 'done').length;
+  const pct = sprintTickets.length ? Math.round((done / sprintTickets.length) * 100) : 0;
+
+  // drag & drop: a card carries its ticket id; a weekday column plans it on that day, a status column changes the status
+  const byId = useMemo(() => Object.fromEntries(sprintTickets.map((t) => [t.id, t])), [sprintTickets]);
   const dropProps = (key, apply) => ({
     onDragOver: (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dropKey !== key) setDropKey(key); },
     onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDropKey(null); },
@@ -31,32 +64,9 @@ export default function App() {
       e.preventDefault();
       setDropKey(null);
       const id = Number(e.dataTransfer.getData('text/plain'));
-      if (id) apply(id);
+      if (id && byId[id]) apply(byId[id]);
     },
   });
-  const [toast, setToast] = useState('');
-  const fileRef = useRef(null);
-
-  const from = ymd(monday);
-  const to = ymd(addDays(monday, 6));
-  const todayKey = ymd(today());
-
-  const categories = useLiveQuery(() => db.categories.toArray(), [], []);
-  const weekTickets = useLiveQuery(
-    () => db.tickets.where('date').between(from, to, true, true).toArray(),
-    [from, to],
-    []
-  );
-  const allCount = useLiveQuery(() => db.tickets.count(), [], 0);
-
-  const catById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories]);
-  const visible = weekTickets
-    .filter((t) => filter === 'all' || t.categoryId === filter)
-    .filter((t) => catById[t.categoryId])
-    .sort((a, b) => (a.date + (a.start || '')).localeCompare(b.date + (b.start || '')));
-
-  const done = weekTickets.filter((t) => t.status === 'done').length;
-  const pct = weekTickets.length ? Math.round((done / weekTickets.length) * 100) : 0;
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -77,11 +87,12 @@ export default function App() {
     }
   }
 
-  const openCreate = (date) => {
-    const t = today();
-    const inWeek = todayKey >= from && todayKey <= to;
-    setTicketModal({ date: date || (inWeek ? ymd(t) : from) });
+  const openCreate = (date, extra) => {
+    const inSprint = todayKey >= from && todayKey <= to;
+    setTicketModal({ date: date || (inSprint ? todayKey : from), ...extra });
   };
+
+  const isBoard = view === 'status' || view === 'days';
 
   return (
     <div className="app">
@@ -103,18 +114,20 @@ export default function App() {
       <div className="layout">
         <aside className="sidebar">
           <div className="weeknav">
-            <button className="icon-btn" aria-label={tr('이전 주')} onClick={() => setMonday(addDays(monday, -7))}><I.ChevronLeft /></button>
+            <button className="icon-btn" aria-label={tr('이전 스프린트')} onClick={() => setMonday(addDays(monday, -7))}><I.ChevronLeft /></button>
             <span className="weeknav-label">
-              <strong>{weekTitle(monday)}</strong>
-              <small>{monday.getMonth() + 1}.{monday.getDate()} ~ {addDays(monday, 6).getMonth() + 1}.{addDays(monday, 6).getDate()}</small>
+              <strong>{sprint}</strong>
+              <small>{fmtDay(from)} ~ {fmtDay(to)}</small>
             </span>
-            <button className="icon-btn" aria-label={tr('다음 주')} onClick={() => setMonday(addDays(monday, 7))}><I.ChevronRight /></button>
+            <button className="icon-btn" aria-label={tr('다음 스프린트')} onClick={() => setMonday(addDays(monday, 7))}><I.ChevronRight /></button>
           </div>
-          <button className="btn ghost small" onClick={() => setMonday(mondayOf(today()))}>{tr('이번 주로')}</button>
+          {sprint !== currentSprint && (
+            <button className="btn ghost small" onClick={() => setMonday(mondayOf(today()))}>{tr('이번 스프린트로')}</button>
+          )}
 
           <nav className="side-section" aria-label={tr('보기')}>
             <div className="side-head"><span>{tr('보기')}</span></div>
-            <NavRow icon={<I.Board />} label={tr('보드')} active={view === 'date' || view === 'status'} onClick={() => setView(view === 'status' ? 'status' : 'date')} />
+            <NavRow icon={<I.Board />} label={tr('스프린트 보드')} active={isBoard} onClick={() => setView(isBoard ? view : 'status')} />
             <NavRow icon={<I.Calendar />} label={tr('캘린더')} active={view === 'meeting'} onClick={() => setView('meeting')} />
             <NavRow icon={<I.Check />} label={tr('오늘의 플랜')} active={view === 'today'} onClick={() => setView('today')} />
           </nav>
@@ -125,13 +138,13 @@ export default function App() {
               <button className="icon-btn small" aria-label={tr('카테고리 설정')} onClick={() => setCatOpen(true)}><I.Sliders /></button>
             </div>
             <CatRow active={filter === 'all'} label={tr('전체')} short={tr('전')} color="#E6E8EB" soft="#353A43"
-              count={weekTickets.length} onClick={() => setFilter('all')} />
+              count={sprintTickets.length} onClick={() => setFilter('all')} />
             {categories.map((c) => {
               const p = PALETTE[c.colorIndex] || PALETTE[0];
               return (
                 <CatRow key={c.id} active={filter === c.id} label={c.name} short={c.key.slice(0, 2)}
                   color={p.color} soft={p.soft}
-                  count={weekTickets.filter((t) => t.categoryId === c.id).length}
+                  count={sprintTickets.filter((t) => t.categoryId === c.id).length}
                   onClick={() => setFilter(c.id)} />
               );
             })}
@@ -144,9 +157,9 @@ export default function App() {
           </section>
 
           <section className="progress">
-            <div className="row-between"><strong>{tr('이번 주 진행률')}</strong><span>{pct}%</span></div>
+            <div className="row-between"><strong>{tr('스프린트 진행률')}</strong><span>{pct}%</span></div>
             <div className="bar"><div style={{ width: pct + '%' }} /></div>
-            <small>{weekTickets.length ? tr('{n}개 중 {d}개 완료', { n: weekTickets.length, d: done }) : tr('티켓을 추가하면 진행률이 보여요')}</small>
+            <small>{sprintTickets.length ? tr('{n}개 중 {d}개 완료', { n: sprintTickets.length, d: done }) : tr('티켓을 추가하면 진행률이 보여요')}</small>
           </section>
 
           <section className="side-section">
@@ -160,58 +173,39 @@ export default function App() {
 
         <main className="main">
           {view === 'today' && <TodayPlan />}
-          {view !== 'today' && <div className="main-head">
-            <div>
-              <small className="muted">{tr('카테고리')} / {filter === 'all' ? tr('전체') : (catById[filter] || {}).name}</small>
-              <h1>{tr(view === 'meeting' ? '{w} 미팅' : '{w} 보드', { w: weekTitle(monday) })} <span className="muted h1-sub">{fmtDay(from)} ~ {fmtDay(to)}</span></h1>
-            </div>
-            {view !== 'meeting' && (
-              <div className="segmented" role="group" aria-label={tr('보드 보기 방식')}>
-                <button aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('날짜별')}</button>
-                <button aria-pressed={view === 'status'} onClick={() => setView('status')}>{tr('상태별')}</button>
+
+          {view !== 'today' && (
+            <div className="main-head">
+              <div>
+                <small className="muted">{tr('카테고리')} / {filter === 'all' ? tr('전체') : (catById[filter] || {}).name}</small>
+                <h1>{view === 'meeting' ? tr('{w} 미팅', { w: sprint }) : sprint}
+                  <span className="muted h1-sub">{fmtDay(from)} ~ {fmtDay(to)} · {tr('일요일 마감')}</span>
+                </h1>
               </div>
-            )}
-          </div>}
+              {isBoard && (
+                <div className="segmented" role="group" aria-label={tr('보드 보기 방식')}>
+                  <button aria-pressed={view === 'status'} onClick={() => setView('status')}>{tr('상태별')}</button>
+                  <button aria-pressed={view === 'days'} onClick={() => setView('days')}>{tr('요일별')}</button>
+                </div>
+              )}
+            </div>
+          )}
 
           {view === 'meeting' && (
             <MeetingCalendar monday={monday} todayKey={todayKey} catById={catById}
               meetings={visible.filter((t) => t.kind === 'meeting')}
-              onCreate={(date, start, end) => setTicketModal({ date, kind: 'meeting', start, end })}
+              onCreate={(date, start, end) => openCreate(date, { kind: 'meeting', start, end })}
               onOpen={setDetailId} />
           )}
-          {view === 'meeting' || view === 'today' ? null : view === 'date' ? (
-            <div className="scroll-x">
-              <div className="days">
-                {MON_FIRST.map((wd, i) => {
-                  const dt = addDays(monday, i);
-                  const key = ymd(dt);
-                  const list = visible.filter((t) => t.date === key);
-                  const isToday = key === todayKey;
-                  return (
-                    <section key={key} className={'day' + (isToday ? ' today' : '') + (dropKey === key ? ' drop' : '')}
-                      {...dropProps(key, (id) => updateTicket(id, { date: key }))} aria-label={fmtDay(key)}>
-                      <div className="day-head">
-                        <span className={'wd' + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '')}>{weekdayName(wd)}</span>
-                        <span className="day-num">{dt.getDate()}</span>
-                        {isToday && <span className="today-pill">{tr('오늘')}</span>}
-                        <span className="day-count">{list.length ? list.length + tr('개') : ''}</span>
-                      </div>
-                      {list.length === 0 && <span className="day-empty">{tr('비어 있어요')}</span>}
-                      {list.map((t) => <Card key={t.id} t={t} cat={catById[t.categoryId]} compact onOpen={setDetailId} />)}
-                      <button className="add-day" onClick={() => openCreate(key)} aria-label={tr('{d}에 추가', { d: fmtDay(key) })}><I.Plus size={12} /> {tr('추가')}</button>
-                    </section>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
+
+          {view === 'status' && (
             <div className="scroll-x">
               <div className="status-cols">
                 {Object.entries(STATUS).map(([id, s]) => {
                   const list = visible.filter((t) => t.status === id);
                   return (
                     <section key={id} className={'status-col' + (dropKey === id ? ' drop' : '')}
-                      {...dropProps(id, (tid) => setStatus(tid, id))}>
+                      {...dropProps(id, (t) => setStatus(t.id, id))}>
                       <div className="day-head">
                         <span className="dot" style={{ background: s.color }} />
                         <span className="col-title">{tr(s.label)}</span>
@@ -219,11 +213,53 @@ export default function App() {
                       </div>
                       {list.length === 0 && <span className="day-empty">{tr('비어 있어요')}</span>}
                       {list.map((t) => <Card key={t.id} t={t} cat={catById[t.categoryId]} onOpen={setDetailId} />)}
+                      {id === 'todo' && (
+                        <button className="add-day" onClick={() => openCreate()}><I.Plus size={12} /> {tr('추가')}</button>
+                      )}
                     </section>
                   );
                 })}
               </div>
             </div>
+          )}
+
+          {view === 'days' && (
+            <>
+              {visible.some((t) => t.kind !== 'meeting' && !(t.days || NO_DAYS).some(Boolean)) && (
+                <section className="unplanned">
+                  <span className="label">{tr('요일 안 정한 티켓')} <small className="muted">{tr('요일 칸으로 끌어다 놓으면 그 요일에 들어가요')}</small></span>
+                  <div className="unplanned-list">
+                    {visible.filter((t) => t.kind !== 'meeting' && !(t.days || NO_DAYS).some(Boolean)).map((t) => (
+                      <Card key={t.id} t={t} cat={catById[t.categoryId]} compact onOpen={setDetailId} />
+                    ))}
+                  </div>
+                </section>
+              )}
+              <div className="scroll-x">
+                <div className="days">
+                  {MON_FIRST.map((wd, i) => {
+                    const dt = addDays(monday, i);
+                    const key = ymd(dt);
+                    const list = visible.filter((t) => (t.kind === 'meeting' ? t.date === key : (t.days || NO_DAYS)[i]));
+                    const isToday = key === todayKey;
+                    return (
+                      <section key={key} className={'day' + (isToday ? ' today' : '') + (dropKey === key ? ' drop' : '')}
+                        {...dropProps(key, (t) => moveToDay(t, i))} aria-label={fmtDay(key)}>
+                        <div className="day-head">
+                          <span className={'wd' + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '')}>{weekdayName(wd)}</span>
+                          <span className="day-num">{dt.getDate()}</span>
+                          {isToday && <span className="today-pill">{tr('오늘')}</span>}
+                          <span className="day-count">{list.length ? list.length + tr('개') : ''}</span>
+                        </div>
+                        {list.length === 0 && <span className="day-empty">{tr('비어 있어요')}</span>}
+                        {list.map((t) => <Card key={t.id} t={t} cat={catById[t.categoryId]} compact dayIndex={i} onOpen={setDetailId} />)}
+                        <button className="add-day" onClick={() => openCreate(key, { pickDay: true })} aria-label={tr('{d}에 추가', { d: fmtDay(key) })}><I.Plus size={12} /> {tr('추가')}</button>
+                      </section>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
           )}
         </main>
       </div>
@@ -231,13 +267,15 @@ export default function App() {
       {ticketModal && (
         <TicketModal
           categories={categories}
+          sprint={sprint}
+          pickDay={!!ticketModal.pickDay}
           defaultDate={ticketModal.date}
           defaultKind={ticketModal.kind || (view === 'meeting' ? 'meeting' : 'task')}
           defaultStart={ticketModal.start}
           defaultEnd={ticketModal.end}
           defaultCategoryId={filter === 'all' ? (categories[0] && categories[0].id) : filter}
           onClose={() => setTicketModal(null)}
-          onCreated={(n) => { setTicketModal(null); setToast(n > 1 ? tr('티켓 {n}개를 만들었어요', { n }) : tr('만들었어요')); }}
+          onCreated={() => { setTicketModal(null); setToast(tr('만들었어요')); }}
           onOpenCategories={() => setCatOpen(true)}
         />
       )}
@@ -267,11 +305,11 @@ function CatRow({ active, label, short, color, soft, count, onClick }) {
   );
 }
 
-function Card({ t, cat, compact, onOpen }) {
+function Card({ t, cat, compact, dayIndex, onOpen }) {
   const [dragging, setDragging] = useState(false);
   if (!cat) return null;
   const p = PALETTE[cat.colorIndex] || PALETTE[0];
-  const s = STATUS[t.status];
+  const s = STATUS[t.status] || STATUS.todo;
   const isMeeting = t.kind === 'meeting';
   const time = isMeeting ? (t.allDay ? tr('하루 종일') : `${fmtTime(t.start)} ~ ${fmtTime(t.end)}`) : '';
   const deadline = t.deadline ? `${fmtDay(t.deadline)}${t.deadlineTime ? ' ' + fmtTime(t.deadlineTime) : ''}` : '';
@@ -291,16 +329,16 @@ function Card({ t, cat, compact, onOpen }) {
         </span>
         <span className={'card-title' + (done ? ' done' : '')}>{t.title}</span>
         {t.desc && !compact && <span className="card-desc">{t.desc}</span>}
-        {!compact && <span className="card-meta"><I.Clock /> {fmtDay(t.date)}{time ? ' · ' + time : ''}</span>}
-        {compact && time && <span className="card-meta"><I.Clock /> {time}</span>}
+        {isMeeting && <span className="card-meta"><I.Clock /> {compact ? time : `${fmtDay(t.date)} · ${time}`}</span>}
         {deadline && <span className={'card-meta' + (t.priority === 'high' && !done ? ' urgent' : '')}><I.Flag /> {tr('마감 {d}까지', { d: deadline })}</span>}
         <span className="card-tags">
           <span className="tag" style={{ background: p.soft, color: p.color }}>{cat.name}</span>
           <span className="status-pill" style={{ background: s.soft, color: s.color }}>{tr(s.label)}</span>
-          {t.seriesTotal > 1 && <span className="muted tiny"><I.Repeat /> {tr('반복')}</span>}
+          {t.carry && <span className="muted tiny" title={tr('다음 스프린트에도 이어서')}><I.Repeat /> {tr('매주')}</span>}
           {t.priority === 'high' && <span className="urgent" role="img" aria-label={tr('높은 우선순위')}><I.ArrowUp /></span>}
         </span>
       </button>
+      {!isMeeting && <DayChecks t={t} highlight={dayIndex} />}
       {t.checklist && t.checklist.length > 0 && (
         <ul className="checklist" aria-label={tr('{title} 체크리스트', { title: t.title })}>
           {t.checklist.map((item, i) => (
@@ -316,3 +354,4 @@ function Card({ t, cat, compact, onOpen }) {
     </div>
   );
 }
+

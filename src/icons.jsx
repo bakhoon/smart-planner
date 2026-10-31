@@ -46,3 +46,6 @@ export const Calendar = ({ size = 16 }) => (
 export const Check = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" strokeWidth="2.2" {...base}><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 12.5l3 3 5-6" /></svg>
 );
+export const CheckMark = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" strokeWidth="3.2" {...base}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+);

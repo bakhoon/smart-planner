@@ -1,20 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, PALETTE, code, setStatus, toggleCheck, updateTicket, deleteTicket, deleteSeries } from './db.js';
-import { fmtDay, fmtTime } from './dates.js';
+import { db, PALETTE, code, setStatus, toggleCheck, toggleDay, updateTicket, deleteTicket, deleteSeries, sprintEnd } from './db.js';
+import DayChecks from './DayChecks.jsx';
+import { Toggle } from './TicketModal.jsx';
+import { fmtDay, fmtTime, weekdayLong, weekdayName } from './dates.js';
 import { tr } from './i18n.js';
 import * as I from './icons.jsx';
 
 export const STATUS = {
-  todo: { label: tr('할 일'), color: '#8B929D', soft: '#2B3038' },
-  doing: { label: tr('진행 중'), color: '#579DFF', soft: '#1E3358' },
+  todo: { label: '할 일', color: '#8B929D', soft: '#2B3038' },
+  doing: { label: '진행 중', color: '#579DFF', soft: '#1E3358' },
   hard: { label: 'Block', color: '#F87462', soft: '#4A2422' },
-  done: { label: tr('완료'), color: '#4CC38A', soft: '#163628' },
+  done: { label: '완료', color: '#4CC38A', soft: '#163628' },
 };
 const PRIORITY = { high: '높음', mid: '보통', low: '낮음' };
+const MON_FIRST = [1, 2, 3, 4, 5, 6, 0];
+const NO_DAYS = [false, false, false, false, false, false, false];
 
 export default function TicketDetail({ id, catById, onClose }) {
   const t = useLiveQuery(() => db.tickets.get(id), [id]);
+  const chainCount = useLiveQuery(() => (t && t.chainId ? db.tickets.where('chainId').equals(t.chainId).count() : 0), [t && t.chainId], 0);
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [newItem, setNewItem] = useState('');
@@ -79,15 +84,41 @@ export default function TicketDetail({ id, catById, onClose }) {
           </div>
 
           <dl className="facts">
-            <dt>{tr('날짜')}</dt>
-            <dd>{fmtDay(t.date)}</dd>
-            {isMeeting && (<><dt>{tr('시간')}</dt><dd>{t.allDay ? tr('하루 종일') : `${fmtTime(t.start)} ~ ${fmtTime(t.end)}`}</dd></>)}
-            {!isMeeting && (<><dt>{tr('데드라인')}</dt><dd className={t.deadline && t.priority === 'high' && t.status !== 'done' ? 'urgent' : ''}>
-              {t.deadline ? tr('{d}까지', { d: fmtDay(t.deadline) + (t.deadlineTime ? ' ' + fmtTime(t.deadlineTime) : '') }) : tr('없음')}</dd></>)}
+            {isMeeting ? (
+              <><dt>{tr('날짜')}</dt><dd>{fmtDay(t.date)}</dd>
+                <dt>{tr('시간')}</dt><dd>{t.allDay ? tr('하루 종일') : `${fmtTime(t.start)} ~ ${fmtTime(t.end)}`}</dd></>
+            ) : (
+              <><dt>{tr('스프린트')}</dt><dd>{t.sprint} <span className="muted">({fmtDay(t.sprint.slice(7))} ~ {fmtDay(sprintEnd(t.sprint))})</span></dd>
+                <dt>{tr('데드라인')}</dt><dd className={t.priority === 'high' && t.status !== 'done' ? 'urgent' : ''}>
+                  {t.deadline
+                    ? tr('{d}까지', { d: fmtDay(t.deadline) + (t.deadlineTime ? ' ' + fmtTime(t.deadlineTime) : '') })
+                    : tr('스프린트 끝 ({d})', { d: fmtDay(sprintEnd(t.sprint)) })}</dd></>
+            )}
             <dt>{tr('우선순위')}</dt>
-            <dd>{PRIORITY[t.priority] || tr('보통')}</dd>
-            {t.seriesTotal > 1 && (<><dt>{tr('반복')}</dt><dd>{tr('반복으로 만든 티켓이에요')}</dd></>)}
+            <dd>{tr(PRIORITY[t.priority] || '보통')}</dd>
           </dl>
+
+          {!isMeeting && (
+            <div className="field">
+              <span className="label">{tr('할 요일')}</span>
+              <div className="wrap" role="group" aria-label={tr('할 요일')}>
+                {MON_FIRST.map((wd, i) => (
+                  <button key={i} className={'day-toggle' + ((t.days || NO_DAYS)[i] ? ' on' : '')} aria-pressed={!!(t.days || NO_DAYS)[i]}
+                    aria-label={weekdayLong(wd)} onClick={() => toggleDay(t, i)}>{weekdayName(wd)}</button>
+                ))}
+              </div>
+              {(t.days || NO_DAYS).some(Boolean) && (
+                <>
+                  <span className="label">{tr('한 날 체크')}</span>
+                  <DayChecks t={t} />
+                </>
+              )}
+            </div>
+          )}
+
+          <Toggle checked={!!t.carry} onChange={(v) => updateTicket(t.id, { carry: v })}
+            label={isMeeting ? tr('매주 이어서') : tr('다음 스프린트에도 이어서')}
+            hint={t.carriedTo ? tr('{s}에 이미 이어졌어요', { s: t.carriedTo }) : tr('켜 두면 새 스프린트마다 같은 티켓이 새로 생겨요.')} />
 
           <div className="field">
             <label className="label" htmlFor="td-desc">{tr('설명')}</label>
@@ -120,11 +151,11 @@ export default function TicketDetail({ id, catById, onClose }) {
 
           {confirming && (
             <div className="confirm" role="alert">
-              <span className="grow">{t.seriesId ? tr('이 티켓만 지울까요, 반복으로 만든 티켓 전부를 지울까요?') : tr('이 티켓을 지울까요?')}</span>
+              <span className="grow">{chainCount > 1 ? tr('이 티켓만 지울까요, 이어진 티켓 {n}개 전부를 지울까요?', { n: chainCount }) : tr('이 티켓을 지울까요?')}</span>
               <button className="btn ghost small" onClick={() => setConfirming(false)}>{tr('취소')}</button>
               <button className="btn danger small" onClick={() => { deleteTicket(t.id); onClose(); }}>{tr('이것만 지우기')}</button>
-              {t.seriesId && (
-                <button className="btn danger-outline small" onClick={() => { deleteSeries(t.seriesId); onClose(); }}>{tr('반복 전부 지우기')}</button>
+              {chainCount > 1 && (
+                <button className="btn danger-outline small" onClick={() => { deleteSeries(t.chainId); onClose(); }}>{tr('이어진 티켓 전부 지우기')}</button>
               )}
             </div>
           )}
