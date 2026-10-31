@@ -94,6 +94,11 @@ export async function createTickets(form) {
       number: ++n,
       title: form.title.trim(),
       desc: form.desc.trim(),
+      // each repeated ticket gets its own copy, so checking one day doesn't check the others
+      checklist: (form.checklist || [])
+        .map((text) => text.trim())
+        .filter(Boolean)
+        .map((text) => ({ text, done: false })),
       date,
       start: meeting && !form.allDay ? form.start : '',
       end: meeting && !form.allDay ? form.end : '',
@@ -117,6 +122,11 @@ const NEXT = { todo: 'doing', doing: 'done', done: 'todo' };
 
 export async function cycleStatus(ticket) {
   await db.tickets.update(ticket.id, { status: NEXT[ticket.status] });
+}
+
+export async function toggleCheck(ticket, index) {
+  const checklist = (ticket.checklist || []).map((item, i) => (i === index ? { ...item, done: !item.done } : item));
+  await db.tickets.update(ticket.id, { checklist });
 }
 
 export async function deleteTicket(id) {

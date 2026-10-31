@@ -27,8 +27,19 @@ export default function TicketModal({ categories, defaultDate, defaultCategoryId
       deadline: '',
       deadlineTime: '18:00',
       priority: 'mid',
+      checklist: [],
     };
   });
+  const [newItem, setNewItem] = useState('');
+
+  const addItem = () => {
+    const text = newItem.trim();
+    if (!text) return;
+    setForm((f) => ({ ...f, checklist: [...f.checklist, text] }));
+    setNewItem('');
+  };
+  const editItem = (i, text) => setForm((f) => ({ ...f, checklist: f.checklist.map((x, k) => (k === i ? text : x)) }));
+  const removeItem = (i) => setForm((f) => ({ ...f, checklist: f.checklist.filter((_, k) => k !== i) }));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -103,8 +114,30 @@ export default function TicketModal({ categories, defaultDate, defaultCategoryId
           </div>
 
           <Field label="설명" htmlFor="tm-d">
-            <textarea id="tm-d" rows={3} value={form.desc} placeholder="예: 아란 일일 퀘스트, 몬스터파크 2회" onChange={(e) => set('desc', e.target.value)} />
+            <textarea id="tm-d" rows={3} value={form.desc} placeholder="예: 주간 보고서 정리해서 금요일 회의 전에 공유하기" onChange={(e) => set('desc', e.target.value)} />
           </Field>
+
+          <div className="field">
+            <label className="label" htmlFor="tm-check">체크리스트 <span className="muted">(선택)</span></label>
+            {form.checklist.length > 0 && (
+              <ul className="check-edit">
+                {form.checklist.map((text, i) => (
+                  <li key={i} className="row">
+                    <span className="box" aria-hidden="true" />
+                    <input aria-label={`항목 ${i + 1}`} value={text} onChange={(e) => editItem(i, e.target.value)} />
+                    <button className="icon-btn small" aria-label={`항목 ${i + 1} 지우기`} onClick={() => removeItem(i)}><I.Close size={14} /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="row">
+              <input id="tm-check" value={newItem} placeholder="해야 할 일을 쓰고 Enter (예: 지난주 숫자 모으기)"
+                onChange={(e) => setNewItem(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); addItem(); } }} />
+              <button className="btn outline small" onClick={addItem}><I.Plus size={12} /> 추가</button>
+            </div>
+            {isRepeat && <small className="muted">반복 티켓마다 체크리스트가 따로 생겨요. 오늘 체크해도 다른 날은 그대로예요.</small>}
+          </div>
 
           <Choice label="반복 (기간 안의 날짜마다 티켓 만들기)" value={form.repeat} onChange={(v) => set('repeat', v)}
             options={[{ v: 'once', label: '한 번만' }, { v: 'daily', label: '매일' }, { v: 'weekly', label: '매주 (요일)' }]} />

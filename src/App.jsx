@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, PALETTE, code, cycleStatus, deleteTicket, deleteSeries, exportAll, importAll } from './db.js';
+import { db, PALETTE, code, cycleStatus, toggleCheck, deleteTicket, deleteSeries, exportAll, importAll } from './db.js';
 import { WEEKDAYS, ymd, addDays, today, mondayOf, fmtDay, fmtTime, weekTitle } from './dates.js';
 import TicketModal from './TicketModal.jsx';
 import CategoryModal from './CategoryModal.jsx';
@@ -244,10 +244,22 @@ function Card({ t, cat, compact }) {
         <span className="card-tags">
           <span className="tag" style={{ background: p.soft, color: p.color }}>{cat.name}</span>
           <span className="muted tiny">{s.label}</span>
-          {t.seriesTotal > 1 && <span className="muted tiny"><I.Repeat /> {t.seriesIndex}/{t.seriesTotal}</span>}
+          {t.seriesTotal > 1 && <span className="muted tiny"><I.Repeat /> 반복</span>}
           {t.priority === 'high' && <span className="urgent" role="img" aria-label="높은 우선순위"><I.ArrowUp /></span>}
         </span>
       </button>
+      {t.checklist && t.checklist.length > 0 && (
+        <ul className="checklist" aria-label={`${t.title} 체크리스트`}>
+          {t.checklist.map((item, i) => (
+            <li key={i}>
+              <label className={'check' + (item.done ? ' done' : '')}>
+                <input type="checkbox" checked={item.done} onChange={() => toggleCheck(t, i)} />
+                <span>{item.text}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
       <button className="card-del" aria-label={`${t.title} 지우기`} onClick={() => setConfirming(true)}><I.Trash size={12} /></button>
       {confirming && (
         <div className="card-confirm" role="alert">

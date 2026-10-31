@@ -50,11 +50,11 @@ export default function CategoryModal({ categories, onClose }) {
             <div className="row">
               <div className="field grow">
                 <label className="label" htmlFor="cm-name">이름</label>
-                <input id="cm-name" value={form.name} placeholder="예: 메이플" onChange={(e) => { setForm({ ...form, name: e.target.value }); setError(''); }} />
+                <input id="cm-name" value={form.name} placeholder="예: 회사" onChange={(e) => { setForm({ ...form, name: e.target.value }); setError(''); }} />
               </div>
               <div className="field">
                 <label className="label" htmlFor="cm-key">키 (작은 표시)</label>
-                <input id="cm-key" className="key-input" value={form.key} placeholder="MAP" maxLength={6}
+                <input id="cm-key" className="key-input" value={form.key} placeholder="WRK" maxLength={6}
                   onChange={(e) => { setForm({ ...form, key: cleanKey(e.target.value) }); setError(''); }} />
               </div>
             </div>
@@ -72,7 +72,7 @@ export default function CategoryModal({ categories, onClose }) {
             </div>
             <div className="row">
               <span className="tag" style={{ background: p.soft, color: p.color }}>{form.name.trim() || '카테고리 이름'}</span>
-              <small className="muted">번호 예시 {code(form.key || 'KEY', 1)}</small>
+              <small className="muted">번호 예시 {code(form.key || 'WRK', 1)}</small>
               <span className="grow" />
               {form.id && <button className="btn ghost small" onClick={() => setForm(blank(categories.length))}>새로 만들기</button>}
               <button className="btn primary small" onClick={save}>{form.id ? '저장' : '추가'}</button>
