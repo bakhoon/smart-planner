@@ -224,3 +224,27 @@ small { font-size: 12px; }
 .card.hard { background: #5E3234; border-color: #C9605A; }
 .card.hard:hover { border-color: #E07A72; }
 .card.hard .card-title { color: #FFE1DC; }
+
+/* 오늘의 플랜 */
+.nav-icon { width: 24px; display: inline-flex; justify-content: center; color: var(--text2); }
+.cat-row.active .nav-icon { color: #fff; }
+.plan { max-width: 760px; width: 100%; display: flex; flex-direction: column; gap: 14px; }
+.plan-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.plan-head h1 { font-size: 24px; font-weight: 900; }
+.plan-nav { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 10px; background: var(--col); }
+.plan-nav .icon-btn:disabled { opacity: 0.3; cursor: default; }
+.plan-date { min-width: 150px; text-align: center; font-weight: 700; }
+.plan-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; border-radius: 10px; background: var(--col); }
+.plan-row, .plan-add { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 8px; border-radius: 8px; }
+.plan-row:hover { background: var(--panel); }
+.plan-row input[type='checkbox'] { flex: none; width: 18px; height: 18px; accent-color: #4CC38A; cursor: pointer; }
+.plan-text { flex: 1; min-width: 0; height: 38px; padding: 0 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; font-size: 15px; }
+.plan-text:hover, .plan-text:focus { border-color: var(--line3); background: var(--panel); }
+.plan-row.done .plan-text { color: var(--muted); text-decoration: line-through; }
+.plan-time { flex: none; width: 120px; height: 36px; padding: 0 6px; border: 1px solid var(--line2); border-radius: 6px; background: var(--panel); color: var(--text2); }
+.plan-time-label { display: none; }
+.plan-empty { padding: 18px; text-align: center; color: var(--muted); font-size: 13px; }
+.plan-add { border: 1px dashed #3A404A; background: transparent; }
+.plan-add .box { flex: none; width: 18px; height: 18px; border: 1.5px solid var(--line3); border-radius: 4px; }
+.segmented.lang { margin-left: 8px; }
+.segmented.lang button { height: 30px; padding: 0 12px; font-size: 13px; }

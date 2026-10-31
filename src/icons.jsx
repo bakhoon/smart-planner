@@ -40,3 +40,9 @@ export const Upload = ({ size = 16 }) => (
 export const ArrowUp = ({ size = 12 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" strokeWidth="2.6" {...base}><path d="M6 15l6-6 6 6" /></svg>
 );
+export const Calendar = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" strokeWidth="2.2" {...base}><rect x="3.5" y="5" width="17" height="15" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4" /></svg>
+);
+export const Check = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" strokeWidth="2.2" {...base}><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 12.5l3 3 5-6" /></svg>
+);

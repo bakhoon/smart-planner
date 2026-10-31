@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { PALETTE, code, toggleCheck, deleteTicket } from './db.js';
-import { WEEKDAYS, ymd, addDays, fmtDay, fmtTime } from './dates.js';
+import { addDays, fmtDay, fmtLong, fmtTime, weekdayLong, weekdayName, ymd } from './dates.js';
+import { tr } from './i18n.js';
 import * as I from './icons.jsx';
 
 const START_HOUR = 6;
@@ -85,7 +86,7 @@ export default function MeetingCalendar({ monday, meetings, catById, todayKey, o
 
   return (
     <div className="mc">
-      <section className="mc-grid-wrap" aria-label="이번 주 미팅 캘린더">
+      <section className="mc-grid-wrap" aria-label={tr('이번 주 미팅 캘린더')}>
         <div className="mc-grid">
           <div className="mc-head">
             <span />
@@ -93,7 +94,7 @@ export default function MeetingCalendar({ monday, meetings, catById, todayKey, o
               const key = ymd(addDays(monday, i));
               return (
                 <span key={key} className={'mc-day-head' + (key === todayKey ? ' today' : '')}>
-                  <span className={'wd' + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '')}>{WEEKDAYS[wd]}</span>
+                  <span className={'wd' + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '')}>{weekdayName(wd)}</span>
                   <strong>{addDays(monday, i).getDate()}</strong>
                 </span>
               );
@@ -101,7 +102,7 @@ export default function MeetingCalendar({ monday, meetings, catById, todayKey, o
           </div>
 
           <div className="mc-allday">
-            <span className="mc-gutter-label">종일</span>
+            <span className="mc-gutter-label">{tr('종일')}</span>
             {MON_FIRST.map((_, i) => {
               const key = ymd(addDays(monday, i));
               return (
@@ -121,7 +122,7 @@ export default function MeetingCalendar({ monday, meetings, catById, todayKey, o
           <div className="mc-body">
             <div className="mc-gutter" style={{ height: HEIGHT }}>
               {hours.map((h) => (
-                <span key={h} style={{ top: (h - START_HOUR) * ROW }}>{fmtTime(toHHMM(h)).replace(':00', '시')}</span>
+                <span key={h} style={{ top: (h - START_HOUR) * ROW }}>{fmtTime(toHHMM(h)).replace(':00', tr('시'))}</span>
               ))}
             </div>
             {MON_FIRST.map((_, i) => {
@@ -177,8 +178,8 @@ export default function MeetingCalendar({ monday, meetings, catById, todayKey, o
             onClose={() => setSelectedId(null)} />
         ) : (
           <div className="mc-panel">
-            <h2>이번 주 미팅 <span className="muted">{weekList.length}개</span></h2>
-            {weekList.length === 0 && <p className="muted small-text">아직 미팅이 없어요. 캘린더의 빈 시간을 위아래로 드래그해서 만들어 보세요.</p>}
+            <h2>{tr('이번 주 미팅')} <span className="muted">{tr('{n}개', { n: weekList.length })}</span></h2>
+            {weekList.length === 0 && <p className="muted small-text">{tr('아직 미팅이 없어요. 캘린더의 빈 시간을 위아래로 드래그해서 만들어 보세요.')}</p>}
             {weekList.map((m) => {
               const cat = catById[m.categoryId];
               if (!cat) return null;
@@ -188,7 +189,7 @@ export default function MeetingCalendar({ monday, meetings, catById, todayKey, o
                   <span className="mc-list-day">{fmtDay(m.date)}</span>
                   <span className="grow">
                     <strong>{m.title}</strong>
-                    <small className="muted block">{m.allDay ? '하루 종일' : `${fmtTime(m.start)} ~ ${fmtTime(m.end)}`}</small>
+                    <small className="muted block">{m.allDay ? tr('하루 종일') : `${fmtTime(m.start)} ~ ${fmtTime(m.end)}`}</small>
                   </span>
                   <span className="tag" style={{ background: p.soft, color: p.color }}>{cat.name}</span>
                 </button>
@@ -207,14 +208,14 @@ function MeetingDetail({ t, cat, confirming, onAskDelete, onCancelDelete, onDele
     <div className="mc-panel">
       <div className="row-between">
         <small className="muted">{code(cat.key, t.number)}</small>
-        <button className="icon-btn small" aria-label="닫기" onClick={onClose}><I.Close size={14} /></button>
+        <button className="icon-btn small" aria-label={tr('닫기')} onClick={onClose}><I.Close size={14} /></button>
       </div>
       <h2>{t.title}</h2>
       <div className="row">
         <span className="tag" style={{ background: p.soft, color: p.color }}>{cat.name}</span>
-        <span className="meeting-tag">미팅</span>
+        <span className="meeting-tag">{tr('미팅')}</span>
       </div>
-      <p className="card-meta"><I.Clock /> {fmtDay(t.date)} · {t.allDay ? '하루 종일' : `${fmtTime(t.start)} ~ ${fmtTime(t.end)}`}</p>
+      <p className="card-meta"><I.Clock /> {fmtDay(t.date)} · {t.allDay ? tr('하루 종일') : `${fmtTime(t.start)} ~ ${fmtTime(t.end)}`}</p>
       {t.desc && <p className="detail-desc">{t.desc}</p>}
       {t.checklist && t.checklist.length > 0 && (
         <ul className="checklist flush">
@@ -229,12 +230,12 @@ function MeetingDetail({ t, cat, confirming, onAskDelete, onCancelDelete, onDele
         </ul>
       )}
       {!confirming ? (
-        <button className="btn danger-outline small" onClick={onAskDelete}><I.Trash size={12} /> 이 미팅 지우기</button>
+        <button className="btn danger-outline small" onClick={onAskDelete}><I.Trash size={12} /> {tr('이 미팅 지우기')}</button>
       ) : (
         <div className="confirm" role="alert">
-          <span className="grow">이 미팅을 지울까요?</span>
-          <button className="btn ghost small" onClick={onCancelDelete}>취소</button>
-          <button className="btn danger small" onClick={onDelete}>지우기</button>
+          <span className="grow">{tr('이 미팅을 지울까요?')}</span>
+          <button className="btn ghost small" onClick={onCancelDelete}>{tr('취소')}</button>
+          <button className="btn danger small" onClick={onDelete}>{tr('지우기')}</button>
         </div>
       )}
     </div>

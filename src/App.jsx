@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, PALETTE, code, toggleCheck, setStatus, updateTicket, exportAll, importAll } from './db.js';
-import { WEEKDAYS, ymd, addDays, today, mondayOf, fmtDay, fmtTime, weekTitle } from './dates.js';
+import { addDays, fmtDay, fmtLong, fmtTime, mondayOf, today, weekTitle, weekdayLong, weekdayName, ymd } from './dates.js';
+import { tr, getLang, setLang } from './i18n.js';
 import TicketModal from './TicketModal.jsx';
 import CategoryModal from './CategoryModal.jsx';
 import MeetingCalendar from './MeetingCalendar.jsx';
 import TicketDetail, { STATUS } from './TicketDetail.jsx';
+import TodayPlan from './TodayPlan.jsx';
 import * as I from './icons.jsx';
 
 const MON_FIRST = [1, 2, 3, 4, 5, 6, 0];
@@ -17,6 +19,8 @@ export default function App() {
   const [ticketModal, setTicketModal] = useState(null);
   const [catOpen, setCatOpen] = useState(false);
   const [detailId, setDetailId] = useState(null);
+  const [lang, setLangState] = useState(getLang());
+  const switchLang = (l) => { setLang(l); setLangState(l); };
   const [dropKey, setDropKey] = useState(null);
 
   // drag & drop: a card carries its ticket id; a day column changes the date, a status column changes the status
@@ -64,12 +68,12 @@ export default function App() {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    if (!window.confirm('백업 파일로 지금 데이터를 전부 바꿀까요? 지금 있는 데이터는 사라져요.')) return;
+    if (!window.confirm(tr('백업 파일로 지금 데이터를 전부 바꿀까요? 지금 있는 데이터는 사라져요.'))) return;
     try {
       const r = await importAll(file);
-      setToast(`가져왔어요: 카테고리 ${r.categories}개, 티켓 ${r.tickets}개`);
+      setToast(tr('가져왔어요: 카테고리 {c}개, 티켓 {n}개', { c: r.categories, n: r.tickets }));
     } catch (err) {
-      setToast(err.message || '가져오기에 실패했어요.');
+      setToast(err.message || tr('가져오기에 실패했어요.'));
     }
   }
 
@@ -84,32 +88,43 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark"><I.Board /></span>
-          <span>플래너</span>
+          <span>{tr('플래너')}</span>
         </div>
         <button className="btn primary" onClick={() => openCreate()}>
-          <I.Plus /> 만들기
+          <I.Plus /> {tr('만들기')}
         </button>
-        <span className="topbar-note">이 컴퓨터에만 저장돼요 · 인터넷 없이 동작해요</span>
+        <div className="segmented lang" role="group" aria-label="Language / 언어">
+          <button aria-pressed={lang === 'ko'} onClick={() => switchLang('ko')}>한국어</button>
+          <button aria-pressed={lang === 'en'} onClick={() => switchLang('en')}>English</button>
+        </div>
+        <span className="topbar-note">{tr('이 컴퓨터에만 저장돼요 · 인터넷 없이 동작해요')}</span>
       </header>
 
       <div className="layout">
         <aside className="sidebar">
           <div className="weeknav">
-            <button className="icon-btn" aria-label="이전 주" onClick={() => setMonday(addDays(monday, -7))}><I.ChevronLeft /></button>
+            <button className="icon-btn" aria-label={tr('이전 주')} onClick={() => setMonday(addDays(monday, -7))}><I.ChevronLeft /></button>
             <span className="weeknav-label">
               <strong>{weekTitle(monday)}</strong>
               <small>{monday.getMonth() + 1}.{monday.getDate()} ~ {addDays(monday, 6).getMonth() + 1}.{addDays(monday, 6).getDate()}</small>
             </span>
-            <button className="icon-btn" aria-label="다음 주" onClick={() => setMonday(addDays(monday, 7))}><I.ChevronRight /></button>
+            <button className="icon-btn" aria-label={tr('다음 주')} onClick={() => setMonday(addDays(monday, 7))}><I.ChevronRight /></button>
           </div>
-          <button className="btn ghost small" onClick={() => setMonday(mondayOf(today()))}>이번 주로</button>
+          <button className="btn ghost small" onClick={() => setMonday(mondayOf(today()))}>{tr('이번 주로')}</button>
+
+          <nav className="side-section" aria-label={tr('보기')}>
+            <div className="side-head"><span>{tr('보기')}</span></div>
+            <NavRow icon={<I.Board />} label={tr('보드')} active={view === 'date' || view === 'status'} onClick={() => setView(view === 'status' ? 'status' : 'date')} />
+            <NavRow icon={<I.Calendar />} label={tr('캘린더')} active={view === 'meeting'} onClick={() => setView('meeting')} />
+            <NavRow icon={<I.Check />} label={tr('오늘의 플랜')} active={view === 'today'} onClick={() => setView('today')} />
+          </nav>
 
           <section className="side-section">
             <div className="side-head">
-              <span>카테고리</span>
-              <button className="icon-btn small" aria-label="카테고리 설정" onClick={() => setCatOpen(true)}><I.Sliders /></button>
+              <span>{tr('카테고리')}</span>
+              <button className="icon-btn small" aria-label={tr('카테고리 설정')} onClick={() => setCatOpen(true)}><I.Sliders /></button>
             </div>
-            <CatRow active={filter === 'all'} label="전체" short="전" color="#E6E8EB" soft="#353A43"
+            <CatRow active={filter === 'all'} label={tr('전체')} short={tr('전')} color="#E6E8EB" soft="#353A43"
               count={weekTickets.length} onClick={() => setFilter('all')} />
             {categories.map((c) => {
               const p = PALETTE[c.colorIndex] || PALETTE[0];
@@ -122,39 +137,41 @@ export default function App() {
             })}
             {categories.length === 0 && (
               <div className="empty-box">
-                <p>아직 카테고리가 없어요. 일, 교회, 집처럼 나눌 카테고리를 만들어 보세요.</p>
-                <button className="btn outline small" onClick={() => setCatOpen(true)}>카테고리 만들기</button>
+                <p>{tr('아직 카테고리가 없어요. 일, 교회, 집처럼 나눌 카테고리를 만들어 보세요.')}</p>
+                <button className="btn outline small" onClick={() => setCatOpen(true)}>{tr('카테고리 만들기')}</button>
               </div>
             )}
           </section>
 
           <section className="progress">
-            <div className="row-between"><strong>이번 주 진행률</strong><span>{pct}%</span></div>
+            <div className="row-between"><strong>{tr('이번 주 진행률')}</strong><span>{pct}%</span></div>
             <div className="bar"><div style={{ width: pct + '%' }} /></div>
-            <small>{weekTickets.length ? `${weekTickets.length}개 중 ${done}개 완료` : '티켓을 추가하면 진행률이 보여요'}</small>
+            <small>{weekTickets.length ? tr('{n}개 중 {d}개 완료', { n: weekTickets.length, d: done }) : tr('티켓을 추가하면 진행률이 보여요')}</small>
           </section>
 
           <section className="side-section">
-            <div className="side-head"><span>백업</span></div>
-            <button className="btn outline small" onClick={() => exportAll().then(() => setToast('백업 파일을 저장했어요'))}><I.Download /> 내보내기</button>
-            <button className="btn outline small" onClick={() => fileRef.current && fileRef.current.click()}><I.Upload /> 가져오기</button>
+            <div className="side-head"><span>{tr('백업')}</span></div>
+            <button className="btn outline small" onClick={() => exportAll().then(() => setToast(tr('백업 파일을 저장했어요')))}><I.Download /> {tr('내보내기')}</button>
+            <button className="btn outline small" onClick={() => fileRef.current && fileRef.current.click()}><I.Upload /> {tr('가져오기')}</button>
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={onImport} />
-            <small className="muted">전체 티켓 {allCount}개</small>
+            <small className="muted">{tr('전체 티켓 {n}개', { n: allCount })}</small>
           </section>
         </aside>
 
         <main className="main">
-          <div className="main-head">
+          {view === 'today' && <TodayPlan />}
+          {view !== 'today' && <div className="main-head">
             <div>
-              <small className="muted">카테고리 / {filter === 'all' ? '전체' : (catById[filter] || {}).name}</small>
-              <h1>{weekTitle(monday)} {view === 'meeting' ? '미팅' : '보드'} <span className="muted h1-sub">{fmtDay(from)} ~ {fmtDay(to)}</span></h1>
+              <small className="muted">{tr('카테고리')} / {filter === 'all' ? tr('전체') : (catById[filter] || {}).name}</small>
+              <h1>{tr(view === 'meeting' ? '{w} 미팅' : '{w} 보드', { w: weekTitle(monday) })} <span className="muted h1-sub">{fmtDay(from)} ~ {fmtDay(to)}</span></h1>
             </div>
-            <div className="segmented" role="group" aria-label="보드 보기 방식">
-              <button aria-pressed={view === 'date'} onClick={() => setView('date')}>날짜별</button>
-              <button aria-pressed={view === 'status'} onClick={() => setView('status')}>상태별</button>
-              <button aria-pressed={view === 'meeting'} onClick={() => setView('meeting')}>미팅 캘린더</button>
-            </div>
-          </div>
+            {view !== 'meeting' && (
+              <div className="segmented" role="group" aria-label={tr('보드 보기 방식')}>
+                <button aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('날짜별')}</button>
+                <button aria-pressed={view === 'status'} onClick={() => setView('status')}>{tr('상태별')}</button>
+              </div>
+            )}
+          </div>}
 
           {view === 'meeting' && (
             <MeetingCalendar monday={monday} todayKey={todayKey} catById={catById}
@@ -162,7 +179,7 @@ export default function App() {
               onCreate={(date, start, end) => setTicketModal({ date, kind: 'meeting', start, end })}
               onOpen={setDetailId} />
           )}
-          {view === 'meeting' ? null : view === 'date' ? (
+          {view === 'meeting' || view === 'today' ? null : view === 'date' ? (
             <div className="scroll-x">
               <div className="days">
                 {MON_FIRST.map((wd, i) => {
@@ -172,16 +189,16 @@ export default function App() {
                   const isToday = key === todayKey;
                   return (
                     <section key={key} className={'day' + (isToday ? ' today' : '') + (dropKey === key ? ' drop' : '')}
-                      {...dropProps(key, (id) => updateTicket(id, { date: key }))} aria-label={`${dt.getMonth() + 1}월 ${dt.getDate()}일 ${WEEKDAYS[wd]}요일`}>
+                      {...dropProps(key, (id) => updateTicket(id, { date: key }))} aria-label={fmtDay(key)}>
                       <div className="day-head">
-                        <span className={'wd' + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '')}>{WEEKDAYS[wd]}</span>
+                        <span className={'wd' + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '')}>{weekdayName(wd)}</span>
                         <span className="day-num">{dt.getDate()}</span>
-                        {isToday && <span className="today-pill">오늘</span>}
-                        <span className="day-count">{list.length ? list.length + '개' : ''}</span>
+                        {isToday && <span className="today-pill">{tr('오늘')}</span>}
+                        <span className="day-count">{list.length ? list.length + tr('개') : ''}</span>
                       </div>
-                      {list.length === 0 && <span className="day-empty">비어 있어요</span>}
+                      {list.length === 0 && <span className="day-empty">{tr('비어 있어요')}</span>}
                       {list.map((t) => <Card key={t.id} t={t} cat={catById[t.categoryId]} compact onOpen={setDetailId} />)}
-                      <button className="add-day" onClick={() => openCreate(key)} aria-label={`${fmtDay(key)}에 추가`}><I.Plus size={12} /> 추가</button>
+                      <button className="add-day" onClick={() => openCreate(key)} aria-label={tr('{d}에 추가', { d: fmtDay(key) })}><I.Plus size={12} /> {tr('추가')}</button>
                     </section>
                   );
                 })}
@@ -197,10 +214,10 @@ export default function App() {
                       {...dropProps(id, (tid) => setStatus(tid, id))}>
                       <div className="day-head">
                         <span className="dot" style={{ background: s.color }} />
-                        <span className="col-title">{s.label}</span>
+                        <span className="col-title">{tr(s.label)}</span>
                         <span className="count-pill">{list.length}</span>
                       </div>
-                      {list.length === 0 && <span className="day-empty">비어 있어요</span>}
+                      {list.length === 0 && <span className="day-empty">{tr('비어 있어요')}</span>}
                       {list.map((t) => <Card key={t.id} t={t} cat={catById[t.categoryId]} onOpen={setDetailId} />)}
                     </section>
                   );
@@ -220,7 +237,7 @@ export default function App() {
           defaultEnd={ticketModal.end}
           defaultCategoryId={filter === 'all' ? (categories[0] && categories[0].id) : filter}
           onClose={() => setTicketModal(null)}
-          onCreated={(n) => { setTicketModal(null); setToast(n > 1 ? `티켓 ${n}개를 만들었어요` : '만들었어요'); }}
+          onCreated={(n) => { setTicketModal(null); setToast(n > 1 ? tr('티켓 {n}개를 만들었어요', { n }) : tr('만들었어요')); }}
           onOpenCategories={() => setCatOpen(true)}
         />
       )}
@@ -228,6 +245,15 @@ export default function App() {
       {catOpen && <CategoryModal categories={categories} onClose={() => setCatOpen(false)} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
+  );
+}
+
+function NavRow({ icon, label, active, onClick }) {
+  return (
+    <button className={'cat-row' + (active ? ' active' : '')} aria-current={active ? 'page' : undefined} onClick={onClick}>
+      <span className="nav-icon">{icon}</span>
+      <span className="grow">{label}</span>
+    </button>
   );
 }
 
@@ -247,8 +273,8 @@ function Card({ t, cat, compact, onOpen }) {
   const p = PALETTE[cat.colorIndex] || PALETTE[0];
   const s = STATUS[t.status];
   const isMeeting = t.kind === 'meeting';
-  const time = isMeeting ? (t.allDay ? '하루 종일' : `${fmtTime(t.start)} ~ ${fmtTime(t.end)}`) : '';
-  const deadline = t.deadline ? `${fmtDay(t.deadline)}${t.deadlineTime ? ' ' + fmtTime(t.deadlineTime) : ''}까지` : '';
+  const time = isMeeting ? (t.allDay ? tr('하루 종일') : `${fmtTime(t.start)} ~ ${fmtTime(t.end)}`) : '';
+  const deadline = t.deadline ? `${fmtDay(t.deadline)}${t.deadlineTime ? ' ' + fmtTime(t.deadlineTime) : ''}` : '';
   const done = t.status === 'done';
 
   return (
@@ -257,26 +283,26 @@ function Card({ t, cat, compact, onOpen }) {
       onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragging(true); }}
       onDragEnd={() => setDragging(false)}>
       <button className="card-main" onClick={() => onOpen(t.id)}
-        aria-label={`${t.title}, ${s.label}, 눌러서 자세히 보기`}>
+        aria-label={tr('{title}, {status}, 눌러서 자세히 보기', { title: t.title, status: tr(s.label) })}>
         <span className="card-top">
           <span className="dot" style={{ background: s.color }} />
           <span className="card-key">{code(cat.key, t.number)}</span>
-          {isMeeting && <span className="meeting-tag">미팅</span>}
+          {isMeeting && <span className="meeting-tag">{tr('미팅')}</span>}
         </span>
         <span className={'card-title' + (done ? ' done' : '')}>{t.title}</span>
         {t.desc && !compact && <span className="card-desc">{t.desc}</span>}
         {!compact && <span className="card-meta"><I.Clock /> {fmtDay(t.date)}{time ? ' · ' + time : ''}</span>}
         {compact && time && <span className="card-meta"><I.Clock /> {time}</span>}
-        {deadline && <span className={'card-meta' + (t.priority === 'high' && !done ? ' urgent' : '')}><I.Flag /> 마감 {deadline}</span>}
+        {deadline && <span className={'card-meta' + (t.priority === 'high' && !done ? ' urgent' : '')}><I.Flag /> {tr('마감 {d}까지', { d: deadline })}</span>}
         <span className="card-tags">
           <span className="tag" style={{ background: p.soft, color: p.color }}>{cat.name}</span>
-          <span className="status-pill" style={{ background: s.soft, color: s.color }}>{s.label}</span>
-          {t.seriesTotal > 1 && <span className="muted tiny"><I.Repeat /> 반복</span>}
-          {t.priority === 'high' && <span className="urgent" role="img" aria-label="높은 우선순위"><I.ArrowUp /></span>}
+          <span className="status-pill" style={{ background: s.soft, color: s.color }}>{tr(s.label)}</span>
+          {t.seriesTotal > 1 && <span className="muted tiny"><I.Repeat /> {tr('반복')}</span>}
+          {t.priority === 'high' && <span className="urgent" role="img" aria-label={tr('높은 우선순위')}><I.ArrowUp /></span>}
         </span>
       </button>
       {t.checklist && t.checklist.length > 0 && (
-        <ul className="checklist" aria-label={`${t.title} 체크리스트`}>
+        <ul className="checklist" aria-label={tr('{title} 체크리스트', { title: t.title })}>
           {t.checklist.map((item, i) => (
             <li key={i}>
               <label className={'check' + (item.done ? ' done' : '')}>

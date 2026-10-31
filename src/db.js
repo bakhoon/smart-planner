@@ -1,5 +1,6 @@
 // Local database (IndexedDB through Dexie). Works offline; nothing leaves this computer.
 import Dexie from 'dexie';
+import { tr } from './i18n.js';
 import { parseDate, addDays, ymd } from './dates.js';
 
 export const db = new Dexie('planner');
@@ -10,6 +11,12 @@ db.version(1).stores({
   categories: '++id, &key, name',
   // date = the day the ticket sits on the board
   tickets: '++id, categoryId, date, status, kind, seriesId',
+});
+// v2 adds 오늘의 플랜 (simple daily checklist). Existing categories and tickets are kept as they are.
+db.version(2).stores({
+  categories: '++id, &key, name',
+  tickets: '++id, categoryId, date, status, kind, seriesId',
+  plans: '++id, date',
 });
 
 export const PALETTE = [
@@ -32,10 +39,10 @@ export function cleanKey(raw) {
 export async function saveCategory({ id, name, key, colorIndex }) {
   name = (name || '').trim();
   key = cleanKey(key);
-  if (!name) throw new Error('이름을 입력해 주세요.');
-  if (!/^[A-Z0-9]{2,6}$/.test(key)) throw new Error('키는 영문이나 숫자 2~6자로 넣어 주세요.');
+  if (!name) throw new Error(tr('이름을 입력해 주세요.'));
+  if (!/^[A-Z0-9]{2,6}$/.test(key)) throw new Error(tr('키는 영문이나 숫자 2~6자로 넣어 주세요.'));
   const same = await db.categories.where('key').equals(key).first();
-  if (same && same.id !== id) throw new Error('이미 다른 카테고리가 쓰고 있는 키예요.');
+  if (same && same.id !== id) throw new Error(tr('이미 다른 카테고리가 쓰고 있는 키예요.'));
   const data = { name, key, colorIndex: colorIndex ?? 0 };
   if (id) await db.categories.update(id, data);
   else await db.categories.add({ ...data, lastNumber: 0 });
@@ -65,18 +72,18 @@ export function datesFor(form) {
 }
 
 export function validateTicket(form) {
-  if (!form.title.trim()) return '제목을 입력해 주세요.';
-  if (!form.categoryId) return '카테고리를 골라 주세요. 없으면 카테고리를 먼저 만들어 주세요.';
+  if (!form.title.trim()) return tr('제목을 입력해 주세요.');
+  if (!form.categoryId) return tr('카테고리를 골라 주세요. 없으면 카테고리를 먼저 만들어 주세요.');
   if (form.repeat !== 'once') {
-    if (!form.from || !form.to) return '기간의 시작 날짜와 끝 날짜를 넣어 주세요.';
-    if (form.to < form.from) return '기간의 끝 날짜가 시작 날짜보다 빨라요.';
-    if (form.repeat === 'weekly' && !form.days.some(Boolean)) return '반복할 요일을 하나 이상 골라 주세요.';
+    if (!form.from || !form.to) return tr('기간의 시작 날짜와 끝 날짜를 넣어 주세요.');
+    if (form.to < form.from) return tr('기간의 끝 날짜가 시작 날짜보다 빨라요.');
+    if (form.repeat === 'weekly' && !form.days.some(Boolean)) return tr('반복할 요일을 하나 이상 골라 주세요.');
   }
   if (form.kind === 'meeting' && !form.allDay && (!form.start || !form.end || form.end <= form.start)) {
-    return '끝나는 시간이 시작 시간보다 늦어야 해요.';
+    return tr('끝나는 시간이 시작 시간보다 늦어야 해요.');
   }
-  if (form.kind === 'task' && form.hasDeadline && !form.deadline) return '데드라인 날짜를 골라 주세요.';
-  if (!datesFor(form).length) return '만들어질 날짜가 없어요. 기간이나 요일을 확인해 주세요.';
+  if (form.kind === 'task' && form.hasDeadline && !form.deadline) return tr('데드라인 날짜를 골라 주세요.');
+  if (!datesFor(form).length) return tr('만들어질 날짜가 없어요. 기간이나 요일을 확인해 주세요.');
   return '';
 }
 
@@ -145,6 +152,22 @@ export async function deleteSeries(seriesId) {
   await db.tickets.where('seriesId').equals(seriesId).delete();
 }
 
+/* ---------- 오늘의 플랜 ---------- */
+
+export async function addPlan(date, text, time) {
+  text = (text || '').trim();
+  if (!text) return;
+  await db.plans.add({ date, text, time: time || '', done: false, createdAt: Date.now() });
+}
+
+export async function updatePlan(id, changes) {
+  await db.plans.update(id, changes);
+}
+
+export async function deletePlan(id) {
+  await db.plans.delete(id);
+}
+
 /* ---------- backup ---------- */
 
 export async function exportAll() {
@@ -154,6 +177,7 @@ export async function exportAll() {
     exportedAt: new Date().toISOString(),
     categories: await db.categories.toArray(),
     tickets: await db.tickets.toArray(),
+    plans: await db.plans.toArray(),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -167,13 +191,16 @@ export async function exportAll() {
 export async function importAll(file) {
   const data = JSON.parse(await file.text());
   if (data.app !== 'planner' || !Array.isArray(data.categories) || !Array.isArray(data.tickets)) {
-    throw new Error('플래너 백업 파일이 아니에요.');
+    throw new Error(tr('플래너 백업 파일이 아니에요.'));
   }
-  await db.transaction('rw', db.categories, db.tickets, async () => {
+  const plans = Array.isArray(data.plans) ? data.plans : [];
+  await db.transaction('rw', db.categories, db.tickets, db.plans, async () => {
     await db.tickets.clear();
     await db.categories.clear();
+    await db.plans.clear();
     await db.categories.bulkAdd(data.categories);
     await db.tickets.bulkAdd(data.tickets);
+    await db.plans.bulkAdd(plans);
   });
-  return { categories: data.categories.length, tickets: data.tickets.length };
+  return { categories: data.categories.length, tickets: data.tickets.length, plans: plans.length };
 }

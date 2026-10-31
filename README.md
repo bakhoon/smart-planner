@@ -1,6 +1,6 @@
 # Planner (오프라인 주간 플래너)
 
-Windows에서 더블클릭하면 열리는 플래너 앱이에요. 데이터는 **이 컴퓨터 안에만** 저장되고 인터넷이 없어도 동작해요.
+Windows에서 더블클릭하면 열리는 플래너 앱이에요. 위쪽 버튼으로 **한국어 / English**를 바꿀 수 있어요. 데이터는 **이 컴퓨터 안에만** 저장되고 인터넷이 없어도 동작해요.
 
 - 화면: React (Vite)
 - 데스크톱 창: Electron
@@ -50,7 +50,11 @@ npm run dist
 electron/main.cjs     창 열기 (1400 x 1000)
 src/db.js             데이터베이스: 카테고리, 티켓, 반복 생성, 백업
 src/dates.js          날짜 도우미
-src/App.jsx           주간 보드 (날짜별 / 상태별)
+src/App.jsx           주간 보드 (날짜별 / 상태별), 사이드바
+src/MeetingCalendar.jsx 미팅 캘린더
+src/TodayPlan.jsx     오늘의 플랜 (하루 체크리스트)
+src/TicketDetail.jsx  티켓 상세 창
+src/i18n.js           한국어 / English 문구
 src/TicketModal.jsx   할 일 / 미팅 만들기 창
 src/CategoryModal.jsx 카테고리 설정 (이름, 키, 색)
 src/styles.css        다크 테마
@@ -58,6 +62,7 @@ src/styles.css        다크 테마
 
 ## 데이터 구조
 
+- **plans** (오늘의 플랜): `date`, `text`, `done`, `time` (선택)
 - **categories**: `name`, `key` (예: MAP, 중복 불가), `colorIndex`, `lastNumber`
 - **tickets**: `kind` (task / meeting), `categoryId`, `number` (MAP-00001의 숫자), `title`, `desc`, `date` (보드에 놓이는 날), `start` / `end` / `allDay` (미팅만), `deadline` / `deadlineTime` (할 일, 선택), `priority`, `status` (todo / doing / done), `seriesId` / `seriesIndex` / `seriesTotal` (반복 묶음)
 
