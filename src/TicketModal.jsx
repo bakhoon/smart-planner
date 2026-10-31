@@ -154,8 +154,8 @@ export default function TicketModal({ categories, defaultDate, defaultKind, defa
             </div>
           )}
 
-          {isMeeting && !isRepeat && (
-            <Field label={tr('미팅 날짜')} htmlFor="tm-date">
+          {!isRepeat && (
+            <Field label={isMeeting ? tr('미팅 날짜') : tr('날짜 (보드에 들어갈 날)')} htmlFor="tm-date">
               <input id="tm-date" type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
             </Field>
           )}

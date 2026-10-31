@@ -73,6 +73,7 @@ export function datesFor(form) {
 
 export function validateTicket(form) {
   if (!form.title.trim()) return tr('제목을 입력해 주세요.');
+  if (form.repeat === 'once' && !form.date) return tr('날짜를 골라 주세요.');
   if (!form.categoryId) return tr('카테고리를 골라 주세요. 없으면 카테고리를 먼저 만들어 주세요.');
   if (form.repeat !== 'once') {
     if (!form.from || !form.to) return tr('기간의 시작 날짜와 끝 날짜를 넣어 주세요.');

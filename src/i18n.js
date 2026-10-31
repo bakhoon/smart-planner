@@ -57,6 +57,8 @@ const EN = {
   '끝나는 시간이 시작 시간보다 늦어야 해요.': 'The end time has to be after the start time.',
   '날짜': 'Date',
   '날짜 정하기': 'Set a date',
+  '날짜 (보드에 들어갈 날)': 'Date (the day it goes on the board)',
+  '날짜를 골라 주세요.': 'Pick a date.',
   '날짜마다 티켓이 하나씩 생겨요': 'one ticket is made for each date',
   '날짜별': 'By day',
   '낮음': 'Low',
