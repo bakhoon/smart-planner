@@ -124,6 +124,14 @@ export async function cycleStatus(ticket) {
   await db.tickets.update(ticket.id, { status: NEXT[ticket.status] });
 }
 
+export async function setStatus(id, status) {
+  await db.tickets.update(id, { status });
+}
+
+export async function updateTicket(id, changes) {
+  await db.tickets.update(id, changes);
+}
+
 export async function toggleCheck(ticket, index) {
   const checklist = (ticket.checklist || []).map((item, i) => (i === index ? { ...item, done: !item.done } : item));
   await db.tickets.update(ticket.id, { checklist });

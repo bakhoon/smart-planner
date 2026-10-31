@@ -6,12 +6,12 @@ import * as I from './icons.jsx';
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
-export default function TicketModal({ categories, defaultDate, defaultCategoryId, onClose, onCreated, onOpenCategories }) {
+export default function TicketModal({ categories, defaultDate, defaultKind, defaultStart, defaultEnd, defaultCategoryId, onClose, onCreated, onOpenCategories }) {
   const [form, setForm] = useState(() => {
     const days = [false, false, false, false, false, false, false];
     days[parseDate(defaultDate).getDay()] = true;
     return {
-      kind: 'task',
+      kind: defaultKind || 'task',
       title: '',
       desc: '',
       categoryId: defaultCategoryId || null,
@@ -21,8 +21,8 @@ export default function TicketModal({ categories, defaultDate, defaultCategoryId
       to: ymd(addDays(parseDate(defaultDate), 6)),
       days,
       allDay: false,
-      start: '14:00',
-      end: '15:00',
+      start: defaultStart || '14:00',
+      end: defaultEnd || '15:00',
       hasDeadline: false,
       deadline: '',
       deadlineTime: '18:00',

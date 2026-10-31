@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, PALETTE, code, cycleStatus, toggleCheck, deleteTicket, deleteSeries, exportAll, importAll } from './db.js';
+import { db, PALETTE, code, toggleCheck, setStatus, updateTicket, exportAll, importAll } from './db.js';
 import { WEEKDAYS, ymd, addDays, today, mondayOf, fmtDay, fmtTime, weekTitle } from './dates.js';
 import TicketModal from './TicketModal.jsx';
 import CategoryModal from './CategoryModal.jsx';
+import MeetingCalendar from './MeetingCalendar.jsx';
+import TicketDetail, { STATUS } from './TicketDetail.jsx';
 import * as I from './icons.jsx';
 
-const STATUS = {
-  todo: { label: '할 일', color: '#8B929D' },
-  doing: { label: '진행 중', color: '#579DFF' },
-  done: { label: '완료', color: '#4CC38A' },
-};
 const MON_FIRST = [1, 2, 3, 4, 5, 6, 0];
 
 export default function App() {
@@ -19,6 +16,20 @@ export default function App() {
   const [view, setView] = useState('date');
   const [ticketModal, setTicketModal] = useState(null);
   const [catOpen, setCatOpen] = useState(false);
+  const [detailId, setDetailId] = useState(null);
+  const [dropKey, setDropKey] = useState(null);
+
+  // drag & drop: a card carries its ticket id; a day column changes the date, a status column changes the status
+  const dropProps = (key, apply) => ({
+    onDragOver: (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dropKey !== key) setDropKey(key); },
+    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDropKey(null); },
+    onDrop: (e) => {
+      e.preventDefault();
+      setDropKey(null);
+      const id = Number(e.dataTransfer.getData('text/plain'));
+      if (id) apply(id);
+    },
+  });
   const [toast, setToast] = useState('');
   const fileRef = useRef(null);
 
@@ -136,15 +147,22 @@ export default function App() {
           <div className="main-head">
             <div>
               <small className="muted">카테고리 / {filter === 'all' ? '전체' : (catById[filter] || {}).name}</small>
-              <h1>{weekTitle(monday)} 보드 <span className="muted h1-sub">{fmtDay(from)} ~ {fmtDay(to)}</span></h1>
+              <h1>{weekTitle(monday)} {view === 'meeting' ? '미팅' : '보드'} <span className="muted h1-sub">{fmtDay(from)} ~ {fmtDay(to)}</span></h1>
             </div>
             <div className="segmented" role="group" aria-label="보드 보기 방식">
               <button aria-pressed={view === 'date'} onClick={() => setView('date')}>날짜별</button>
               <button aria-pressed={view === 'status'} onClick={() => setView('status')}>상태별</button>
+              <button aria-pressed={view === 'meeting'} onClick={() => setView('meeting')}>미팅 캘린더</button>
             </div>
           </div>
 
-          {view === 'date' ? (
+          {view === 'meeting' && (
+            <MeetingCalendar monday={monday} todayKey={todayKey} catById={catById}
+              meetings={visible.filter((t) => t.kind === 'meeting')}
+              onCreate={(date, start, end) => setTicketModal({ date, kind: 'meeting', start, end })}
+              onOpen={setDetailId} />
+          )}
+          {view === 'meeting' ? null : view === 'date' ? (
             <div className="scroll-x">
               <div className="days">
                 {MON_FIRST.map((wd, i) => {
@@ -153,7 +171,8 @@ export default function App() {
                   const list = visible.filter((t) => t.date === key);
                   const isToday = key === todayKey;
                   return (
-                    <section key={key} className={'day' + (isToday ? ' today' : '')} aria-label={`${dt.getMonth() + 1}월 ${dt.getDate()}일 ${WEEKDAYS[wd]}요일`}>
+                    <section key={key} className={'day' + (isToday ? ' today' : '') + (dropKey === key ? ' drop' : '')}
+                      {...dropProps(key, (id) => updateTicket(id, { date: key }))} aria-label={`${dt.getMonth() + 1}월 ${dt.getDate()}일 ${WEEKDAYS[wd]}요일`}>
                       <div className="day-head">
                         <span className={'wd' + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '')}>{WEEKDAYS[wd]}</span>
                         <span className="day-num">{dt.getDate()}</span>
@@ -161,7 +180,7 @@ export default function App() {
                         <span className="day-count">{list.length ? list.length + '개' : ''}</span>
                       </div>
                       {list.length === 0 && <span className="day-empty">비어 있어요</span>}
-                      {list.map((t) => <Card key={t.id} t={t} cat={catById[t.categoryId]} compact />)}
+                      {list.map((t) => <Card key={t.id} t={t} cat={catById[t.categoryId]} compact onOpen={setDetailId} />)}
                       <button className="add-day" onClick={() => openCreate(key)} aria-label={`${fmtDay(key)}에 추가`}><I.Plus size={12} /> 추가</button>
                     </section>
                   );
@@ -174,14 +193,15 @@ export default function App() {
                 {Object.entries(STATUS).map(([id, s]) => {
                   const list = visible.filter((t) => t.status === id);
                   return (
-                    <section key={id} className="status-col">
+                    <section key={id} className={'status-col' + (dropKey === id ? ' drop' : '')}
+                      {...dropProps(id, (tid) => setStatus(tid, id))}>
                       <div className="day-head">
                         <span className="dot" style={{ background: s.color }} />
                         <span className="col-title">{s.label}</span>
                         <span className="count-pill">{list.length}</span>
                       </div>
                       {list.length === 0 && <span className="day-empty">비어 있어요</span>}
-                      {list.map((t) => <Card key={t.id} t={t} cat={catById[t.categoryId]} />)}
+                      {list.map((t) => <Card key={t.id} t={t} cat={catById[t.categoryId]} onOpen={setDetailId} />)}
                     </section>
                   );
                 })}
@@ -195,12 +215,16 @@ export default function App() {
         <TicketModal
           categories={categories}
           defaultDate={ticketModal.date}
+          defaultKind={ticketModal.kind || (view === 'meeting' ? 'meeting' : 'task')}
+          defaultStart={ticketModal.start}
+          defaultEnd={ticketModal.end}
           defaultCategoryId={filter === 'all' ? (categories[0] && categories[0].id) : filter}
           onClose={() => setTicketModal(null)}
           onCreated={(n) => { setTicketModal(null); setToast(n > 1 ? `티켓 ${n}개를 만들었어요` : '만들었어요'); }}
           onOpenCategories={() => setCatOpen(true)}
         />
       )}
+      {detailId && <TicketDetail id={detailId} catById={catById} onClose={() => setDetailId(null)} />}
       {catOpen && <CategoryModal categories={categories} onClose={() => setCatOpen(false)} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
@@ -217,8 +241,8 @@ function CatRow({ active, label, short, color, soft, count, onClick }) {
   );
 }
 
-function Card({ t, cat, compact }) {
-  const [confirming, setConfirming] = useState(false);
+function Card({ t, cat, compact, onOpen }) {
+  const [dragging, setDragging] = useState(false);
   if (!cat) return null;
   const p = PALETTE[cat.colorIndex] || PALETTE[0];
   const s = STATUS[t.status];
@@ -228,9 +252,12 @@ function Card({ t, cat, compact }) {
   const done = t.status === 'done';
 
   return (
-    <div className={'card' + (compact ? ' compact' : '')}>
-      <button className="card-main" onClick={() => cycleStatus(t)}
-        aria-label={`${t.title}, ${s.label}, 눌러서 다음 상태로`}>
+    <div className={'card' + (compact ? ' compact' : '') + (t.status === 'hard' ? ' hard' : '') + (dragging ? ' dragging' : '')}
+      draggable
+      onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragging(true); }}
+      onDragEnd={() => setDragging(false)}>
+      <button className="card-main" onClick={() => onOpen(t.id)}
+        aria-label={`${t.title}, ${s.label}, 눌러서 자세히 보기`}>
         <span className="card-top">
           <span className="dot" style={{ background: s.color }} />
           <span className="card-key">{code(cat.key, t.number)}</span>
@@ -243,7 +270,7 @@ function Card({ t, cat, compact }) {
         {deadline && <span className={'card-meta' + (t.priority === 'high' && !done ? ' urgent' : '')}><I.Flag /> 마감 {deadline}</span>}
         <span className="card-tags">
           <span className="tag" style={{ background: p.soft, color: p.color }}>{cat.name}</span>
-          <span className="muted tiny">{s.label}</span>
+          <span className="status-pill" style={{ background: s.soft, color: s.color }}>{s.label}</span>
           {t.seriesTotal > 1 && <span className="muted tiny"><I.Repeat /> 반복</span>}
           {t.priority === 'high' && <span className="urgent" role="img" aria-label="높은 우선순위"><I.ArrowUp /></span>}
         </span>
@@ -259,16 +286,6 @@ function Card({ t, cat, compact }) {
             </li>
           ))}
         </ul>
-      )}
-      <button className="card-del" aria-label={`${t.title} 지우기`} onClick={() => setConfirming(true)}><I.Trash size={12} /></button>
-      {confirming && (
-        <div className="card-confirm" role="alert">
-          <button className="btn danger small" onClick={() => deleteTicket(t.id)}>이것만 지우기</button>
-          {t.seriesId && (
-            <button className="btn danger-outline small" onClick={() => deleteSeries(t.seriesId)}>반복 {t.seriesTotal}개 전부</button>
-          )}
-          <button className="btn ghost small" onClick={() => setConfirming(false)}>취소</button>
-        </div>
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 {
   "name": "planner",
   "productName": "Planner",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Jeremy's weekly planner (offline, local database)",
   "author": "Jeremiah Park",
   "private": true,
