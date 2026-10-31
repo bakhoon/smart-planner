@@ -217,7 +217,7 @@ small { font-size: 12px; }
 .facts dd { margin: 0; color: var(--text); }
 .modal-foot.spread { justify-content: space-between; }
 
-/* drag & drop, 힘듦 */
+/* drag & drop, Block status */
 .card[draggable='true'] { cursor: grab; }
 .card.dragging { opacity: 0.4; }
 .day.drop, .status-col.drop { border-color: var(--primary); background: #1C2433; }

@@ -7,7 +7,7 @@ import * as I from './icons.jsx';
 export const STATUS = {
   todo: { label: '할 일', color: '#8B929D', soft: '#2B3038' },
   doing: { label: '진행 중', color: '#579DFF', soft: '#1E3358' },
-  hard: { label: '힘듦', color: '#F87462', soft: '#4A2422' },
+  hard: { label: 'Block', color: '#F87462', soft: '#4A2422' },
   done: { label: '완료', color: '#4CC38A', soft: '#163628' },
 };
 const PRIORITY = { high: '높음', mid: '보통', low: '낮음' };
