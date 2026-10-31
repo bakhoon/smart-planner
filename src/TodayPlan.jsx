@@ -5,7 +5,7 @@ import { addDays, fmtLong, fmtTime, parseDate, today, weekdayLong, weekdayName, 
 import { tr } from './i18n.js';
 import * as I from './icons.jsx';
 
-// 오늘의 플랜: a plain checklist for one day. Go back to see earlier days.
+// 오늘의 플랜: a plain checklist for one day. Go back to earlier days or ahead to plan future days.
 export default function TodayPlan() {
   const todayKey = ymd(today());
   const [day, setDay] = useState(todayKey);
@@ -28,6 +28,8 @@ export default function TodayPlan() {
   let label = fmtLong(day);
   if (isToday) label += tr(' · 오늘');
   else if (day === ymd(addDays(today(), -1))) label += tr(' · 어제');
+  else if (day === ymd(addDays(today(), 1))) label += tr(' · 내일');
+  const isFuture = day > todayKey;
 
   return (
     <section className="plan" aria-labelledby="plan-title">
@@ -39,7 +41,7 @@ export default function TodayPlan() {
         <div className="plan-nav">
           <button className="icon-btn" aria-label={tr('전날 보기')} onClick={() => setDay(ymd(addDays(d, -1)))}><I.ChevronLeft /></button>
           <span className="plan-date">{label}</span>
-          <button className="icon-btn" aria-label={tr('다음 날 보기')} disabled={isToday} onClick={() => setDay(ymd(addDays(d, 1)))}><I.ChevronRight /></button>
+          <button className="icon-btn" aria-label={tr('다음 날 보기')} onClick={() => setDay(ymd(addDays(d, 1)))}><I.ChevronRight /></button>
           {!isToday && <button className="btn ghost small" onClick={() => setDay(todayKey)}>{tr('오늘로')}</button>}
         </div>
       </div>
@@ -48,7 +50,7 @@ export default function TodayPlan() {
         {items.map((it) => (
           <PlanRow key={it.id} it={it} />
         ))}
-        {items.length === 0 && <li className="plan-empty">{isToday ? tr('아직 비어 있어요') : tr('이 날은 적은 게 없어요')}</li>}
+        {items.length === 0 && <li className="plan-empty">{isToday ? tr('아직 비어 있어요') : isFuture ? tr('이 날 할 일을 미리 적어 둘 수 있어요') : tr('이 날은 적은 게 없어요')}</li>}
       </ul>
 
       <div className="plan-add">

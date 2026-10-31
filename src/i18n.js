@@ -28,6 +28,8 @@ export function tr(text, vars) {
 const EN = {
   ' · 어제': ' · Yesterday',
   ' · 오늘': ' · Today',
+  ' · 내일': ' · Tomorrow',
+  '이 날 할 일을 미리 적어 둘 수 있어요': 'You can plan ahead for this day',
   '(선택)': '(optional)',
   'Block': 'Blocked',
   '{d}까지': 'by {d}',
