@@ -117,8 +117,13 @@ export default function TicketDetail({ id, catById, onClose }) {
           )}
 
           <Toggle checked={!!t.carry} onChange={(v) => updateTicket(t.id, { carry: v })}
-            label={isMeeting ? tr('매주 이어서') : tr('다음 스프린트에도 이어서')}
-            hint={t.carriedTo ? tr('{s}에 이미 이어졌어요', { s: t.carriedTo }) : tr('켜 두면 새 스프린트마다 같은 티켓이 새로 생겨요.')} />
+            label={tr('스프린트 반복')}
+            hint={!t.carry ? tr('꺼져 있어요. 켜면 다음 스프린트에도 같은 티켓이 생겨요.')
+              : [
+                (t.carryEvery || 1) === 2 ? tr('2주마다') : tr('매주'),
+                t.carryUntil ? tr('{s}까지', { s: t.carryUntil }) : tr('계속'),
+                t.carriedTo === 'end' ? tr('마지막 스프린트예요') : t.carriedTo ? tr('{s}에 이미 이어졌어요', { s: t.carriedTo }) : '',
+              ].filter(Boolean).join(' · ')} />
 
           <div className="field">
             <label className="label" htmlFor="td-desc">{tr('설명')}</label>

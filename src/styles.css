@@ -280,3 +280,6 @@ small { font-size: 12px; }
 .undo-bar .grow { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .undo-time { min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
 .toast.raised { bottom: 84px; }
+.repeat-box { padding: 12px 14px; border-radius: 8px; background: var(--panel); gap: 10px; }
+.repeat-box .choice button { background: var(--field); }
+.repeat-box .sprint-pick { background: var(--field); }

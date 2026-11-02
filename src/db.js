@@ -97,6 +97,8 @@ export function validateTicket(form) {
   } else if (form.hasDeadline && !form.deadline) {
     return tr('데드라인 날짜를 골라 주세요.');
   }
+  const base = form.kind === 'meeting' ? sprintOf(form.date) : form.sprint;
+  if (form.repeat === 'until' && form.until < base) return tr('마지막 스프린트가 시작 스프린트보다 빨라요.');
   return '';
 }
 
@@ -140,7 +142,9 @@ export async function createTicket(form) {
       deadlineTime: !meeting && form.hasDeadline ? form.deadlineTime : '',
       priority: form.priority,
       status: 'todo',
-      carry: !!form.carry,
+      carry: form.repeat !== 'none',
+      carryEvery: form.every || 1,
+      carryUntil: form.repeat === 'until' ? form.until : null,
       carriedTo: null,
       chainId,
       createdAt: Date.now(),
@@ -170,15 +174,21 @@ export async function rollForward(targetKey) {
       for (const t of open) {
         const cat = await db.categories.get(t.categoryId);
         if (!cat) { await db.tickets.update(t.id, { carry: false }); continue; }
+        const step = 7 * (t.carryEvery || 1);
+        const nextKey = sprintKey(addDays(sprintMonday(t.sprint), step));
+        if (t.carryUntil && nextKey > t.carryUntil) {
+          // reached the last sprint of the repeat
+          await db.tickets.update(t.id, { carriedTo: 'end' });
+          continue;
+        }
         const n = (cat.lastNumber || 0) + 1;
         await db.categories.update(cat.id, { lastNumber: n });
-        const nextKey = sprintKey(addDays(sprintMonday(t.sprint), 7));
         const copy = {
           ...t,
           number: n,
           sprint: nextKey,
-          date: ymd(addDays(parseDate(t.date), 7)),
-          deadline: t.deadline ? ymd(addDays(parseDate(t.deadline), 7)) : '',
+          date: ymd(addDays(parseDate(t.date), step)),
+          deadline: t.deadline ? ymd(addDays(parseDate(t.deadline), step)) : '',
           status: 'todo',
           daysDone: noDays(),
           checklist: (t.checklist || []).map((c) => ({ ...c, done: false })),

@@ -19,7 +19,9 @@ export default function TicketModal({ categories, sprint, pickDay, defaultDate, 
       categoryId: defaultCategoryId || null,
       sprint,
       days,
-      carry: false,
+      repeat: 'none',
+      every: 1,
+      until: sprintKey(addDays(sprintMonday(sprint), 21)),
       date: defaultDate,
       allDay: false,
       start: defaultStart || '14:00',
@@ -155,8 +157,8 @@ export default function TicketModal({ categories, sprint, pickDay, defaultDate, 
                   </div>
                 )}
               </div>
-              <Toggle checked={form.carry} onChange={(v) => set('carry', v)}
-                label={tr('매주 이어서')} hint={tr('다음 스프린트에도 같은 요일, 같은 시간으로 생겨요')} />
+              <RepeatPicker form={form} set={set} base={form.date ? sprintOf(form.date) : sprint}
+                hint={tr('반복하면 다음 스프린트에도 같은 요일, 같은 시간으로 생겨요')} />
             </>
           ) : (
             <>
@@ -205,8 +207,8 @@ export default function TicketModal({ categories, sprint, pickDay, defaultDate, 
                 )}
               </div>
 
-              <Toggle checked={form.carry} onChange={(v) => set('carry', v)}
-                label={tr('다음 스프린트에도 이어서')} hint={tr('매주 하는 일이면 켜 두세요. 새 스프린트마다 같은 티켓이 새로 생겨요.')} />
+              <RepeatPicker form={form} set={set} base={form.sprint}
+                hint={tr('반복하면 스프린트마다 같은 티켓이 새로 생겨요. 요일 체크는 비워진 채로 시작해요.')} />
             </>
           )}
 
@@ -232,6 +234,40 @@ export default function TicketModal({ categories, sprint, pickDay, defaultDate, 
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Repeat across sprints: none / keep going / until a sprint, every week or every 2 weeks
+function RepeatPicker({ form, set, base, hint }) {
+  const until = form.until < base ? base : form.until;
+  const count = Math.floor((sprintMonday(until) - sprintMonday(base)) / (7 * 86400000 * form.every)) + 1;
+  const moveUntil = (n) => {
+    const next = sprintKey(addDays(sprintMonday(until), 7 * n));
+    if (next >= base) set('until', next);
+  };
+  return (
+    <div className="field repeat-box">
+      <Choice label={tr('스프린트 반복')} value={form.repeat} onChange={(v) => set('repeat', v)}
+        options={[{ v: 'none', label: tr('반복 안 함') }, { v: 'forever', label: tr('계속') }, { v: 'until', label: tr('정한 스프린트까지') }]} />
+      {form.repeat !== 'none' && (
+        <Choice label={tr('간격')} value={String(form.every)} onChange={(v) => set('every', Number(v))}
+          options={[{ v: '1', label: tr('매주') }, { v: '2', label: tr('2주마다') }]} />
+      )}
+      {form.repeat === 'until' && (
+        <div className="field">
+          <span className="label">{tr('마지막 스프린트')}</span>
+          <div className="sprint-pick">
+            <button className="icon-btn small" aria-label={tr('이전 스프린트')} onClick={() => moveUntil(-1)}><I.ChevronLeft /></button>
+            <span className="grow">
+              <strong>{until}</strong>
+              <small className="muted block">{fmtDay(until.slice(7))} ~ {fmtDay(sprintEnd(until))} · {tr('티켓 {n}개', { n: count })}</small>
+            </span>
+            <button className="icon-btn small" aria-label={tr('다음 스프린트')} onClick={() => moveUntil(1)}><I.ChevronRight /></button>
+          </div>
+        </div>
+      )}
+      {form.repeat !== 'none' && <small className="muted">{hint}</small>}
     </div>
   );
 }

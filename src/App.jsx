@@ -368,7 +368,7 @@ function Card({ t, cat, compact, dayIndex, onOpen }) {
         <span className="card-tags">
           <span className="tag" style={{ background: p.soft, color: p.color }}>{cat.name}</span>
           <span className="status-pill" style={{ background: s.soft, color: s.color }}>{tr(s.label)}</span>
-          {t.carry && <span className="muted tiny" title={tr('다음 스프린트에도 이어서')}><I.Repeat /> {tr('매주')}</span>}
+          {t.carry && <span className="muted tiny" title={tr('스프린트 반복')}><I.Repeat /> {(t.carryEvery || 1) === 2 ? tr('2주마다') : tr('매주')}</span>}
           {t.priority === 'high' && <span className="urgent" role="img" aria-label={tr('높은 우선순위')}><I.ArrowUp /></span>}
         </span>
       </button>
