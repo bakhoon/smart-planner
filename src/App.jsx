@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   db, PALETTE, code, toggleCheck, setStatus, moveToDay, rollForward,
-  sprintKey, exportAll, importAll,
+  sprintKey, undoCreate, exportAll, importAll,
 } from './db.js';
 import { addDays, fmtDay, fmtTime, mondayOf, today, weekdayName, ymd } from './dates.js';
 import { tr, getLang, setLang } from './i18n.js';
@@ -29,6 +29,8 @@ export default function App() {
   const switchLang = (l) => { setLang(l); setLangState(l); };
   const [dropKey, setDropKey] = useState(null);
   const [toast, setToast] = useState('');
+  const [undo, setUndo] = useState(null); // { info, until }
+  const [now, setNow] = useState(Date.now());
   const fileRef = useRef(null);
 
   const sprint = sprintKey(monday);
@@ -67,6 +69,25 @@ export default function App() {
       if (id && byId[id]) apply(byId[id]);
     },
   });
+
+  // the undo bar stays for one minute after a ticket is made, then goes away
+  useEffect(() => {
+    if (!undo) return undefined;
+    const id = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= undo.until) setUndo(null);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [undo]);
+
+  const doUndo = async () => {
+    if (!undo) return;
+    const info = undo.info;
+    setUndo(null);
+    await undoCreate(info);
+    setToast(tr('{c} 만들기를 되돌렸어요', { c: code(info.key, info.number) }));
+  };
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -275,13 +296,26 @@ export default function App() {
           defaultEnd={ticketModal.end}
           defaultCategoryId={filter === 'all' ? (categories[0] && categories[0].id) : filter}
           onClose={() => setTicketModal(null)}
-          onCreated={() => { setTicketModal(null); setToast(tr('만들었어요')); }}
+          onCreated={(info, keepOpen) => {
+            if (!keepOpen) setTicketModal(null);
+            setNow(Date.now());
+            setUndo({ info, until: Date.now() + 60000 });
+          }}
           onOpenCategories={() => setCatOpen(true)}
         />
       )}
       {detailId && <TicketDetail id={detailId} catById={catById} onClose={() => setDetailId(null)} />}
       {catOpen && <CategoryModal categories={categories} onClose={() => setCatOpen(false)} />}
-      {toast && <div className="toast" role="status">{toast}</div>}
+      {undo && (
+        <div className="undo-bar" role="status">
+          <I.CheckMark size={14} />
+          <span className="grow">{tr('{c} 만들었어요', { c: code(undo.info.key, undo.info.number) })} <span className="muted">· {undo.info.title}</span></span>
+          <button className="btn outline small" onClick={doUndo}>{tr('되돌리기')}</button>
+          <span className="undo-time">{tr('{s}초', { s: Math.max(0, Math.ceil((undo.until - now) / 1000)) })}</span>
+          <button className="icon-btn small" aria-label={tr('닫기')} onClick={() => setUndo(null)}><I.Close size={14} /></button>
+        </div>
+      )}
+      {toast && <div className={'toast' + (undo ? ' raised' : '')} role="status">{toast}</div>}
     </div>
   );
 }

@@ -120,7 +120,8 @@ export async function createTicket(form) {
       const first = days.findIndex(Boolean);
       date = ymd(addDays(sprintMonday(sprint), first === -1 ? 0 : first));
     }
-    await db.tickets.add({
+    const chainId = `c${Date.now()}`;
+    const id = await db.tickets.add({
       kind: form.kind,
       categoryId: form.categoryId,
       number: n,
@@ -141,10 +142,22 @@ export async function createTicket(form) {
       status: 'todo',
       carry: !!form.carry,
       carriedTo: null,
-      chainId: `c${Date.now()}`,
+      chainId,
       createdAt: Date.now(),
     });
     await db.categories.update(cat.id, { lastNumber: n });
+    return { id, chainId, categoryId: cat.id, number: n, key: cat.key, title: form.title.trim() };
+  });
+}
+
+// Undo a just-made ticket (and any copies already carried into later sprints).
+// The category's counter goes back so the next ticket reuses the number.
+export async function undoCreate(info) {
+  await db.transaction('rw', db.categories, db.tickets, async () => {
+    await db.tickets.where('chainId').equals(info.chainId).delete();
+    const left = await db.tickets.where('categoryId').equals(info.categoryId).toArray();
+    const max = left.reduce((m, t) => Math.max(m, t.number || 0), 0);
+    await db.categories.update(info.categoryId, { lastNumber: max });
   });
 }
 

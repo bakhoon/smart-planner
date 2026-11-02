@@ -26,6 +26,12 @@ export function tr(text, vars) {
 }
 
 const EN = {
+  '{c} 만들었어요. 내용은 그대로 있어요.': '{c} created. Your fields are kept.',
+  '만든 뒤에도 창 닫지 않기': 'Keep this window open after creating',
+  '{c} 만들기를 되돌렸어요': 'Undid {c}',
+  '{c} 만들었어요': '{c} created',
+  '되돌리기': 'Undo',
+  '{s}초': '{s}s',
   '모두 지우기': 'Clear all',
   '이 날 할 일 {n}개를 모두 지울까요?': 'Delete all {n} items for this day?',
   '끌어서 순서 바꾸기': 'Drag to reorder',

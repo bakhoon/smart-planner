@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { PALETTE, validateTicket, createTicket, sprintKey, sprintMonday, sprintOf, sprintEnd, dayIndexOf } from './db.js';
+import { PALETTE, code, validateTicket, createTicket, sprintKey, sprintMonday, sprintOf, sprintEnd, dayIndexOf } from './db.js';
 import { addDays, fmtDay, weekdayLong, weekdayName } from './dates.js';
 import { tr } from './i18n.js';
 import * as I from './icons.jsx';
@@ -34,6 +34,9 @@ export default function TicketModal({ categories, sprint, pickDay, defaultDate, 
   const [newItem, setNewItem] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [keepOpen, setKeepOpen] = useState(() => { try { return localStorage.getItem('planner-keep-open') === '1'; } catch (e) { return false; } });
+  const [made, setMade] = useState(null);
+  const changeKeepOpen = (v) => { setKeepOpen(v); try { localStorage.setItem('planner-keep-open', v ? '1' : '0'); } catch (e) { /* ignore */ } };
 
   useEffect(() => {
     if (!form.categoryId && categories.length) setForm((f) => ({ ...f, categoryId: categories[0].id }));
@@ -45,7 +48,7 @@ export default function TicketModal({ categories, sprint, pickDay, defaultDate, 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const set = (k, v) => { setForm((f) => ({ ...f, [k]: v })); setError(''); };
+  const set = (k, v) => { setForm((f) => ({ ...f, [k]: v })); setError(''); setMade(null); };
   const isMeeting = form.kind === 'meeting';
   const monday = sprintMonday(form.sprint);
   const moveSprint = (n) => set('sprint', sprintKey(addDays(monday, 7 * n)));
@@ -64,8 +67,13 @@ export default function TicketModal({ categories, sprint, pickDay, defaultDate, 
     if (msg) { setError(msg); return; }
     setSaving(true);
     try {
-      await createTicket(form);
-      onCreated();
+      const info = await createTicket(form);
+      onCreated(info, keepOpen);
+      if (keepOpen) {
+        // stay open with every field as it was, ready for the next one
+        setMade(info);
+        setSaving(false);
+      }
     } catch (err) {
       setError(err.message || tr('저장에 실패했어요.'));
       setSaving(false);
@@ -208,9 +216,20 @@ export default function TicketModal({ categories, sprint, pickDay, defaultDate, 
           {error && <p className="error" role="alert">{error}</p>}
         </div>
 
-        <div className="modal-foot">
-          <button className="btn ghost" onClick={onClose}>{tr('취소')}</button>
-          <button className="btn primary" disabled={saving} onClick={submit}>{tr('추가')}</button>
+        {made && (
+          <div className="made-note" role="status">
+            <I.CheckMark size={14} /> {tr('{c} 만들었어요. 내용은 그대로 있어요.', { c: code(made.key, made.number) })}
+          </div>
+        )}
+        <div className="modal-foot spread">
+          <label className="keep-open">
+            <input type="checkbox" checked={keepOpen} onChange={(e) => changeKeepOpen(e.target.checked)} />
+            {tr('만든 뒤에도 창 닫지 않기')}
+          </label>
+          <span className="row">
+            <button className="btn ghost" onClick={onClose}>{keepOpen ? tr('닫기') : tr('취소')}</button>
+            <button className="btn primary" disabled={saving} onClick={submit}>{tr('추가')}</button>
+          </span>
         </div>
       </div>
     </div>

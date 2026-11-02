@@ -271,3 +271,12 @@ small { font-size: 12px; }
 .plan-row.over { box-shadow: inset 0 2px 0 var(--primary); }
 .plan-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .plan-add { padding-left: 43px; }
+
+/* keep open + undo */
+.keep-open { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text2); cursor: pointer; }
+.keep-open input { width: 16px; height: 16px; accent-color: var(--primary); }
+.made-note { display: flex; align-items: center; gap: 8px; margin: 0 24px; padding: 10px 14px; border-radius: 8px; background: #163628; color: #9BE6C0; font-size: 13px; font-weight: 700; }
+.undo-bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40; width: min(560px, calc(100% - 32px)); display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: 12px; background: #2B3038; border: 1px solid var(--line3); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); font-size: 13px; color: #9BE6C0; }
+.undo-bar .grow { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.undo-time { min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+.toast.raised { bottom: 84px; }
