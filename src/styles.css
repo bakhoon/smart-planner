@@ -263,3 +263,11 @@ small { font-size: 12px; }
 .unplanned { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed #3A404A; border-radius: 10px; }
 .unplanned-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
 .weeknav-label strong { font-size: 13px; white-space: nowrap; letter-spacing: -0.2px; }
+
+/* 오늘의 플랜: reorder and clear */
+.grip { flex: none; width: 20px; height: 32px; display: inline-flex; align-items: center; justify-content: center; color: #5C636E; cursor: grab; border-radius: 4px; }
+.grip:hover { color: var(--text2); background: var(--field); }
+.plan-row.dragging { opacity: 0.4; }
+.plan-row.over { box-shadow: inset 0 2px 0 var(--primary); }
+.plan-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.plan-add { padding-left: 43px; }

@@ -26,6 +26,10 @@ export function tr(text, vars) {
 }
 
 const EN = {
+  '모두 지우기': 'Clear all',
+  '이 날 할 일 {n}개를 모두 지울까요?': 'Delete all {n} items for this day?',
+  '끌어서 순서 바꾸기': 'Drag to reorder',
+  '시간은 안 넣어도 돼요. 왼쪽 손잡이를 끌어서 순서를 바꿀 수 있어요.': 'Time is optional. Drag the handle on the left to reorder.',
   '{d} 했어요': 'Did it on {d}',
   '{s}에 이미 이어졌어요': 'Already continued into {s}',
   '고른 요일마다 카드에 체크칸이 생겨요. 안 골라도 돼요.': 'Each picked day gets a check box on the card. You can leave this empty.',

@@ -239,7 +239,8 @@ export async function deleteSeries(chainId) {
 export async function addPlan(date, text, time) {
   text = (text || '').trim();
   if (!text) return;
-  await db.plans.add({ date, text, time: time || '', done: false, createdAt: Date.now() });
+  const now = Date.now();
+  await db.plans.add({ date, text, time: time || '', done: false, createdAt: now, order: now });
 }
 
 export async function updatePlan(id, changes) {
@@ -248,6 +249,17 @@ export async function updatePlan(id, changes) {
 
 export async function deletePlan(id) {
   await db.plans.delete(id);
+}
+
+// Save a new order after dragging: ids in the order they should appear
+export async function reorderPlans(ids) {
+  await db.transaction('rw', db.plans, async () => {
+    for (let i = 0; i < ids.length; i++) await db.plans.update(ids[i], { order: i });
+  });
+}
+
+export async function clearPlans(date) {
+  await db.plans.where('date').equals(date).delete();
 }
 
 /* ---------- backup ---------- */
