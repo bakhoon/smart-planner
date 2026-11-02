@@ -36,7 +36,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: planner-windows
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/*.zip
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -46,7 +48,9 @@ jobs:
           body: |
             Windows 앱이에요.
             - `Planner.Setup.*.exe`: 설치 파일 (바탕화면 아이콘 생성)
-            - `Planner.*.exe`: 설치 없이 바로 실행 (portable)
-            "알 수 없는 게시자" 경고가 뜨면 추가 정보 → 실행을 누르세요.
-          files: release/*.exe
+            - `Planner-*-win.zip`: 압축을 풀고 폴더 안의 `Planner.exe`를 실행 (설치 없이)
+            서명이 없는 앱이라 Windows나 브라우저가 경고할 수 있어요. 추가 정보 → 실행을 누르세요.
+          files: |
+            release/*.exe
+            release/*.zip
           make_latest: true

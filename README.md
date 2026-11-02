@@ -33,7 +33,7 @@ npm run dist
 끝나면 `release` 폴더에 두 가지가 생겨요.
 
 - `Planner Setup 0.1.0.exe`: 설치 파일. 설치하면 바탕화면 아이콘이 생겨요.
-- `Planner 0.1.0.exe`: 설치 없이 바로 실행되는 portable 버전
+- `Planner-버전-win.zip`: 설치 없이 쓰는 버전. 압축을 풀고 안의 `Planner.exe`를 실행
 
 > Windows가 "알 수 없는 게시자" 경고를 띄우면 **추가 정보 → 실행**을 누르면 돼요. 직접 만든 앱이라 서명이 없어서 그래요.
 
